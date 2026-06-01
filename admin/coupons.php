@@ -74,54 +74,55 @@ try {
 <title>Coupons</title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--green:#1db954;--green2:#17a349;--red:#e53935;--amber:#f59e0b;--blue:#3b82f6;--bg:#0f1117;--bg2:#181c25;--bg3:#1f2433;--border:rgba(255,255,255,.08);--text:#eef0f4;--muted:#7a8099;}
+:root{--green:#1db954;--green2:#17a349;--red:#e53935;--amber:#f59e0b;--blue:#3b82f6;--bg:#0f1117;--bg2:#181c25;--bg3:#1f2433;}
 *{box-sizing:border-box;margin:0;padding:0;}
-body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg2);color:var(--text);}
-.header{background:#fff;border-bottom:1px solid var(--border);padding:0 24px;display:flex;align-items:center;gap:14px;height:58px;position:sticky;top:0;z-index:100;box-shadow:0 1px 3px rgba(0,0,0,.06);}
-.header-nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;}
-.header-nav a{font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;text-decoration:none;color:var(--muted);}
+body{font-family:'Plus Jakarta Sans',sans-serif;background:#f1f5f9;color:#111;}
+.header{background:#fff;border-bottom:1px solid #e5e7eb;padding:0 16px;display:flex;align-items:center;gap:12px;height:58px;position:sticky;top:0;z-index:100;box-shadow:0 1px 3px rgba(0,0,0,.06);}
+.header-nav{margin-left:auto;display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.header-nav a{font-size:12px;font-weight:600;padding:6px 10px;border-radius:8px;text-decoration:none;color:#6b7280;white-space:nowrap;}
 .header-nav a.active,.header-nav a:hover{background:var(--green);color:#fff;}
 .layout{display:grid;grid-template-columns:300px 1fr;min-height:calc(100vh - 58px);}
-.sidebar{background:#fff;border-right:1px solid var(--border);padding:24px;}
-.main{padding:24px;}
+.sidebar{background:#fff;border-right:1px solid #e5e7eb;padding:20px;}
+.main{padding:20px;}
 .flash{padding:11px 14px;border-radius:10px;font-size:13px;font-weight:600;margin-bottom:16px;}
 .flash.s{background:#dcfce7;border:1px solid #86efac;color:#15803d;}
 .flash.e{background:#fee2e2;border:1px solid #fca5a5;color:#b91c1c;}
-.section-title{font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;}
-.form-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.05);}
-.form-card h3{font-size:13px;font-weight:700;margin-bottom:14px;color:var(--text);}
+.section-title{font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;}
+.form-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);}
+.form-card h3{font-size:13px;font-weight:700;margin-bottom:14px;color:#111;}
 .field{margin-bottom:10px;}
-.field label{display:block;font-size:11px;font-weight:700;color:var(--muted);margin-bottom:4px;text-transform:uppercase;}
-.field input,.field select{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:9px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;}
+.field label{display:block;font-size:11px;font-weight:700;color:#6b7280;margin-bottom:4px;text-transform:uppercase;}
+.field input,.field select{width:100%;background:#f8fafc;border:1px solid #e5e7eb;border-radius:8px;padding:9px 12px;color:#111;font-size:13px;font-family:inherit;outline:none;}
 .field input:focus,.field select:focus{border-color:var(--green);}
 .field-row{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .btn{display:inline-flex;align-items:center;gap:5px;padding:9px 16px;border-radius:8px;border:none;font-size:12px;font-weight:700;cursor:pointer;font-family:inherit;text-decoration:none;transition:all .15s;}
 .btn-green{background:var(--green);color:#fff;width:100%;justify-content:center;}
-.btn-outline{background:#fff;border:1px solid var(--border);color:var(--muted);}
+.btn-outline{background:#fff;border:1px solid #e5e7eb;color:#6b7280;}
 .btn-outline:hover{border-color:var(--green);color:var(--green);}
 .coupon-grid{display:grid;gap:12px;}
-.coupon-card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.05);position:relative;border-left:4px solid var(--green);}
+.coupon-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,.04);position:relative;border-left:4px solid var(--green);}
 .coupon-card.inactive{border-left-color:#d1d5db;opacity:.65;}
 .coupon-code{font-size:20px;font-weight:800;letter-spacing:2px;color:var(--green);font-family:monospace;}
-.coupon-card.inactive .coupon-code{color:var(--muted);}
+.coupon-card.inactive .coupon-code{color:#9ca3af;}
 .coupon-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:8px;}
 .badge{display:inline-flex;align-items:center;padding:3px 9px;border-radius:20px;font-size:10px;font-weight:700;}
 .b-green{background:#dcfce7;color:#16a34a;}
 .b-amber{background:#fef3c7;color:#92400e;}
 .b-red{background:#fee2e2;color:#b91c1c;}
 .b-gray{background:#f3f4f6;color:#6b7280;}
-.coupon-stats{font-size:12px;color:var(--muted);margin-top:8px;display:flex;gap:16px;}
-.coupon-desc{font-size:12px;color:var(--muted);margin-top:5px;}
-.coupon-actions{margin-top:12px;display:flex;gap:8px;}
-.empty{text-align:center;padding:48px;color:var(--muted);}
-@media(max-width:768px){.layout{grid-template-columns:1fr;}}
+.coupon-stats{font-size:12px;color:#6b7280;margin-top:8px;display:flex;gap:16px;}
+.coupon-desc{font-size:12px;color:#6b7280;margin-top:5px;}
+.coupon-actions{margin-top:12px;display:flex;gap:8px;flex-wrap:wrap;}
+.empty{text-align:center;padding:48px;color:#6b7280;}
+@media(max-width:768px){.layout{grid-template-columns:1fr;}.sidebar{border-right:none;border-bottom:1px solid #e5e7eb;}}
+@media(max-width:640px){.main,.sidebar{padding:14px;}.header-nav a{padding:5px 7px;font-size:11px;}}
 </style>
 </head>
 <body>
 <div class="header">
   <span style="font-size:22px">🍽</span>
-  <div><div style="font-size:15px;font-weight:700"><?= htmlspecialchars(getSetting('restaurant_name','Restaurant')) ?></div>
-  <div style="font-size:11px;color:var(--muted)">Coupons</div></div>
+  <div><div style="font-size:15px;font-weight:700;color:#111"><?= htmlspecialchars(getSetting('restaurant_name','Restaurant')) ?></div>
+  <div style="font-size:11px;color:#6b7280">Coupons</div></div>
   <nav class="header-nav">
     <a href="index.php">📋 Orders</a>
     <a href="menu.php">🍛 Menu</a>

@@ -75,9 +75,9 @@ $punjabi   = ['Itvaar','Somvaar','Mangalvaar','Budhvaar','Veerevaar','Shukarvaar
 body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg2);color:var(--text);min-height:100vh;}
 
 /* HEADER */
-.header{background:#fff;border-bottom:1px solid var(--border);box-shadow:0 1px 3px rgba(0,0,0,.06);padding:0 24px;display:flex;align-items:center;gap:14px;height:58px;position:sticky;top:0;z-index:100;}
-.header-nav{margin-left:auto;display:flex;gap:6px;flex-wrap:wrap;}
-.header-nav a{font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;text-decoration:none;color:var(--muted);}
+.header{background:#fff;border-bottom:1px solid #e5e7eb;box-shadow:0 1px 3px rgba(0,0,0,.06);padding:0 16px;display:flex;align-items:center;gap:12px;height:58px;position:sticky;top:0;z-index:100;}
+.header-nav{margin-left:auto;display:flex;gap:4px;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+.header-nav a{font-size:12px;font-weight:600;padding:6px 10px;border-radius:8px;text-decoration:none;color:#6b7280;white-space:nowrap;}
 .header-nav a.active,.header-nav a:hover{background:var(--green);color:#fff;}
 
 /* MAIN TOGGLE — Big store on/off */
@@ -110,19 +110,19 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg2);color:var(
 .page{max-width:720px;margin:0 auto;padding:0 24px 40px;}
 
 /* SCHEDULE TABLE */
-.schedule-card{background:#fff;border:1px solid var(--border);border-radius:16px;overflow:hidden;margin-bottom:16px;}
-.schedule-head{padding:16px 22px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center;}
-.schedule-head h3{font-size:14px;font-weight:700;}
-.schedule-head .hint{font-size:11px;color:var(--muted);}
+.schedule-card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;overflow:hidden;margin-bottom:16px;}
+.schedule-head{padding:16px 22px;border-bottom:1px solid #e5e7eb;display:flex;justify-content:space-between;align-items:center;}
+.schedule-head h3{font-size:14px;font-weight:700;color:#111;}
+.schedule-head .hint{font-size:11px;color:#6b7280;}
 
-.day-row{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid #f8fafc;transition:background .2s;}
+.day-row{display:flex;align-items:center;gap:14px;padding:14px 22px;border-bottom:1px solid #f3f4f6;transition:background .2s;}
 .day-row:last-child{border-bottom:none;}
 .day-row:hover{background:#fafafa;}
 .day-row.closed-day{opacity:.5;}
 
 .day-name{width:130px;flex-shrink:0;}
-.day-name .en{font-size:13px;font-weight:700;}
-.day-name .pa{font-size:11px;color:var(--muted);margin-top:2px;}
+.day-name .en{font-size:13px;font-weight:700;color:#111;}
+.day-name .pa{font-size:11px;color:#6b7280;margin-top:2px;}
 
 /* Small toggle */
 .s-toggle{position:relative;width:42px;height:24px;flex-shrink:0;}
@@ -144,10 +144,19 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg2);color:var(
 .today-badge{font-size:10px;font-weight:700;background:rgba(29,185,84,.2);color:var(--green);padding:2px 8px;border-radius:10px;margin-left:8px;}
 
 /* Closed message */
-.msg-card{background:#fff;border:1px solid var(--border);border-radius:16px;padding:22px;margin-bottom:16px;}
-.msg-card h3{font-size:14px;font-weight:700;margin-bottom:12px;}
-.msg-card textarea{width:100%;background:var(--bg2);border:1px solid var(--border);border-radius:10px;padding:12px;color:var(--text);font-size:13px;font-family:inherit;outline:none;resize:vertical;min-height:120px;line-height:1.6;}
+.msg-card{background:#fff;border:1px solid #e5e7eb;border-radius:16px;padding:22px;margin-bottom:16px;}
+.msg-card h3{font-size:14px;font-weight:700;margin-bottom:12px;color:#111;}
+.msg-card textarea{width:100%;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px;color:#111;font-size:13px;font-family:inherit;outline:none;resize:vertical;min-height:120px;line-height:1.6;}
 .msg-card textarea:focus{border-color:var(--green);}
+
+@media(max-width:640px){
+  .store-toggle-card{margin:12px;padding:18px;gap:14px;}
+  .page{padding:0 12px 30px;}
+  .day-row{padding:12px 14px;gap:8px;}
+  .day-name{width:90px;}
+  .time-group{flex-wrap:wrap;gap:6px;}
+  .time-input{width:90px;}
+}
 .msg-card small{font-size:11px;color:var(--muted);margin-top:6px;display:block;}
 
 /* Flash */
@@ -175,8 +184,8 @@ body{font-family:'Plus Jakarta Sans',sans-serif;background:var(--bg2);color:var(
 
 <div class="header">
   <span style="font-size:22px">🍽</span>
-  <div><div style="font-size:15px;font-weight:700"><?= htmlspecialchars(getSetting('restaurant_name','Restaurant')) ?></div>
-  <div style="font-size:11px;color:var(--muted)">Store Hours</div></div>
+  <div><div style="font-size:15px;font-weight:700;color:#111"><?= htmlspecialchars(getSetting('restaurant_name','Restaurant')) ?></div>
+  <div style="font-size:11px;color:#6b7280">Store Hours</div></div>
   <nav class="header-nav">
     <a href="index.php">📋 Orders</a>
     <a href="menu.php">🍛 Menu</a>

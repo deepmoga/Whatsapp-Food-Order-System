@@ -125,38 +125,38 @@ if (isset($_GET['edit_item'])) {
 <title>Menu Manager — <?= RESTAURANT_NAME ?></title>
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--green:#1db954;--green2:#17a349;--red:#e53935;--amber:#f59e0b;--blue:#3b82f6;--bg:#0f1117;--bg2:#181c25;--bg3:#1f2433;--border:rgba(255,255,255,.08);--text:#eef0f4;--muted:#7a8099;--radius:12px;}
+:root{--green:#1db954;--green2:#17a349;--red:#e53935;--amber:#f59e0b;--blue:#3b82f6;--bg:#0f1117;--bg2:#181c25;--bg3:#1f2433;--dborder:rgba(255,255,255,.08);--text:#eef0f4;--muted:#7a8099;--radius:12px;}
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
 
 /* ---- HEADER ---- */
 .header {
   background: var(--bg2);
-  border-bottom: 1px solid var(--border);
-  padding: 0 28px;
-  display: flex; align-items: center; gap: 16px;
+  border-bottom: 1px solid var(--dborder);
+  padding: 0 16px;
+  display: flex; align-items: center; gap: 12px;
   height: 60px; position: sticky; top: 0; z-index: 100;
 }
 .header-logo { font-size: 22px; }
 .header-title { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
 .header-sub { font-size: 12px; color: var(--muted); margin-top: 1px; }
-.header-nav { margin-left: auto; display: flex; gap: 8px; }
+.header-nav { margin-left: auto; display: flex; gap: 6px; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .header-nav a {
-  font-size: 12px; font-weight: 600; padding: 7px 14px;
+  font-size: 12px; font-weight: 600; padding: 7px 12px;
   border-radius: 8px; text-decoration: none;
-  color: var(--muted); transition: all .2s;
+  color: var(--muted); transition: all .2s; white-space: nowrap;
 }
 .header-nav a:hover { background: var(--bg3); color: var(--text); }
 .header-nav a.active { background: var(--green); color: #fff; }
 
 /* ---- LAYOUT ---- */
-.layout { display: grid; grid-template-columns: 320px 1fr; gap: 0; min-height: calc(100vh - 60px); }
+.layout { display: grid; grid-template-columns: 300px 1fr; gap: 0; min-height: calc(100vh - 60px); }
 
 /* ---- SIDEBAR ---- */
 .sidebar {
   background: var(--bg2);
-  border-right: 1px solid var(--border);
-  padding: 24px;
+  border-right: 1px solid var(--dborder);
+  padding: 20px;
   overflow-y: auto;
 }
 .section-title {
@@ -167,7 +167,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
 /* ---- FORMS ---- */
 .form-card {
   background: var(--bg3);
-  border: 1px solid var(--border);
+  border: 1px solid var(--dborder);
   border-radius: var(--radius);
   padding: 18px;
   margin-bottom: 20px;
@@ -176,7 +176,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
 .field { margin-bottom: 10px; }
 .field label { display: block; font-size: 11px; font-weight: 600; color: var(--muted); margin-bottom: 5px; letter-spacing: .4px; }
 .field input, .field select, .field textarea {
-  width: 100%; background: var(--bg2); border: 1px solid var(--border);
+  width: 100%; background: var(--bg2); border: 1px solid var(--dborder);
   border-radius: 8px; padding: 9px 12px; color: var(--text);
   font-size: 13px; font-family: inherit; transition: border-color .2s;
   outline: none;
@@ -193,14 +193,14 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
 }
 .btn-green  { background: var(--green); color: #fff; }
 .btn-green:hover  { background: var(--green2); }
-.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--muted); }
+.btn-outline { background: transparent; border: 1px solid var(--dborder); color: var(--muted); }
 .btn-outline:hover { border-color: var(--green); color: var(--green); }
 .btn-red    { background: var(--red); color: #fff; }
 .btn-amber  { background: var(--amber); color: #000; }
 .btn-full   { width: 100%; justify-content: center; }
 
 /* ---- MAIN CONTENT ---- */
-.main { padding: 24px; overflow-y: auto; }
+.main { padding: 20px; overflow-y: auto; }
 
 /* ---- FLASH MESSAGES ---- */
 .flash {
@@ -214,7 +214,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
 .cat-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 20px; }
 .cat-tab {
   padding: 7px 14px; border-radius: 20px; font-size: 12px; font-weight: 600;
-  cursor: pointer; border: 1px solid var(--border); background: var(--bg2);
+  cursor: pointer; border: 1px solid var(--dborder); background: var(--bg2);
   color: var(--muted); transition: all .2s; text-decoration: none;
 }
 .cat-tab:hover, .cat-tab.active { background: var(--green); border-color: var(--green); color: #fff; }
@@ -223,7 +223,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
 /* ---- CATEGORY CARDS ---- */
 .cat-grid { display: grid; gap: 10px; margin-bottom: 28px; }
 .cat-card {
-  background: var(--bg2); border: 1px solid var(--border);
+  background: var(--bg2); border: 1px solid var(--dborder);
   border-radius: var(--radius); padding: 14px 18px;
   display: flex; align-items: center; gap: 12px;
   transition: border-color .2s;
@@ -236,22 +236,22 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
 .cat-actions { display: flex; gap: 6px; align-items: center; }
 
 /* ---- ITEM TABLE ---- */
-.items-table-wrap { background: var(--bg2); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; }
-.items-table { width: 100%; border-collapse: collapse; }
+.items-table-wrap { background: var(--bg2); border: 1px solid var(--dborder); border-radius: var(--radius); overflow-x: auto; }
+.items-table { width: 100%; border-collapse: collapse; min-width: 500px; }
 .items-table th {
   background: var(--bg3); padding: 11px 16px; text-align: left;
   font-size: 10px; font-weight: 700; color: var(--muted);
   letter-spacing: 1px; text-transform: uppercase;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--dborder);
 }
 .items-table td {
-  padding: 12px 16px; border-bottom: 1px solid var(--border);
-  font-size: 13px; vertical-align: middle;
+  padding: 12px 16px; border-bottom: 1px solid var(--dborder);
+  font-size: 13px; vertical-align: middle; color: var(--text);
 }
 .items-table tr:last-child td { border-bottom: none; }
 .items-table tr.disabled-row td { opacity: .45; }
-.items-table tr:hover td { background: #fafafa; }
-.item-name { font-weight: 600; }
+.items-table tr:hover td { background: var(--bg3); }
+.item-name { font-weight: 600; color: var(--text); }
 .item-desc { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .price-tag { font-weight: 700; color: var(--green); }
 .badge {
@@ -260,18 +260,18 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
 }
 .badge-on  { background: rgba(29,185,84,.15); color: var(--green); border: 1px solid rgba(29,185,84,.25); }
 .badge-off { background: rgba(229,57,53,.12); color: #ef5350; border: 1px solid rgba(229,57,53,.2); }
-.actions-cell { display: flex; gap: 6px; align-items: center; }
+.actions-cell { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
 
 /* ---- MODAL ---- */
 .modal-overlay {
   position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 200;
-  display: flex; align-items: center; justify-content: center; padding: 20px;
+  display: flex; align-items: center; justify-content: center; padding: 16px;
   backdrop-filter: blur(4px);
 }
 .modal {
-  background: var(--bg2); border: 1px solid var(--border);
-  border-radius: 16px; padding: 28px; width: 100%; max-width: 480px;
-  animation: modalIn .2s ease;
+  background: var(--bg2); border: 1px solid var(--dborder);
+  border-radius: 16px; padding: 24px; width: 100%; max-width: 480px;
+  animation: modalIn .2s ease; max-height: 90vh; overflow-y: auto;
 }
 @keyframes modalIn { from { transform: scale(.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
@@ -288,11 +288,19 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
 /* ---- FILTER BAR ---- */
 .filter-bar { display: flex; gap: 10px; align-items: center; margin-bottom: 16px; flex-wrap: wrap; }
 .filter-bar input {
-  background: var(--bg2); border: 1px solid var(--border);
+  background: var(--bg2); border: 1px solid var(--dborder);
   border-radius: 8px; padding: 8px 14px; color: var(--text);
-  font-size: 13px; font-family: inherit; outline: none; flex: 1; min-width: 180px;
+  font-size: 13px; font-family: inherit; outline: none; flex: 1; min-width: 160px;
 }
 .filter-bar input:focus { border-color: var(--green); }
+
+/* ---- FILTER SELECT ---- */
+#catFilter {
+  background: var(--bg2); border: 1px solid var(--dborder);
+  border-radius: 8px; padding: 8px 12px; color: var(--text);
+  font-size: 13px; font-family: inherit; outline: none;
+}
+#catFilter:focus { border-color: var(--green); }
 
 /* ---- ITEM COUNT BADGE ---- */
 .count-pill {
@@ -303,7 +311,14 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
 
 @media (max-width: 900px) {
   .layout { grid-template-columns: 1fr; }
-  .sidebar { border-right: none; border-bottom: 1px solid var(--border); }
+  .sidebar { border-right: none; border-bottom: 1px solid var(--dborder); }
+}
+@media (max-width: 640px) {
+  .header { padding: 0 12px; }
+  .header-nav a { padding: 5px 8px; font-size: 11px; }
+  .main { padding: 14px; }
+  .sidebar { padding: 14px; }
+  .cat-grid { grid-template-columns: 1fr !important; }
 }
 </style>
 </head>
@@ -425,7 +440,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
   <div class="filter-bar">
     <div class="section-title" style="margin-bottom:0">Menu Items <span class="count-pill"><?= count($items) ?></span></div>
     <input type="text" id="searchInput" placeholder="🔍 Item search karo..." oninput="filterItems()">
-    <select id="catFilter" onchange="filterItems()" style="background:#fff;border:1px solid var(--border);border-radius:8px;padding:8px 12px;color:var(--text);font-size:13px;font-family:inherit;outline:none">
+    <select id="catFilter" onchange="filterItems()">
       <option value="">Saari Categories</option>
       <?php foreach ($categories as $c): ?>
         <option value="<?= $c['id'] ?>"><?= htmlspecialchars($c['emoji'].' '.$c['name']) ?></option>
