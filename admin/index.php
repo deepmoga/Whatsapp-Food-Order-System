@@ -21,7 +21,12 @@ if (!($_SESSION['admin'] ?? false)) {
 
 $db = getDB(); $msg = '';
 
-// Load delivery boys (soft-fail if table missing)
+// Auto-create delivery columns if missing (no SQL patch needed)
+try { $db->exec("CREATE TABLE IF NOT EXISTS delivery_boys (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(100) NOT NULL, whatsapp_number VARCHAR(20) NOT NULL, is_active TINYINT(1) DEFAULT 1, created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)"); } catch(Exception $e) {}
+try { $db->exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_boy_id INT DEFAULT NULL"); } catch(Exception $e) {}
+try { $db->exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_assigned_at TIMESTAMP NULL DEFAULT NULL"); } catch(Exception $e) {}
+
+// Load delivery boys
 $deliveryBoys = [];
 try { $deliveryBoys = $db->query("SELECT * FROM delivery_boys WHERE is_active=1 ORDER BY name")->fetchAll(); } catch(Exception $e) {}
 
@@ -235,7 +240,6 @@ try {
     $orders = $db->query("SELECT o.*, COALESCE(db.name,'') as delivery_boy_name FROM orders o LEFT JOIN delivery_boys db ON db.id = o.delivery_boy_id {$whereClause} ORDER BY o.created_at DESC LIMIT 200")->fetchAll();
 } catch(Exception $e) {
     $orders = $db->query("SELECT *, '' as delivery_boy_name FROM orders {$whereClause} ORDER BY created_at DESC LIMIT 200")->fetchAll();
-    $deliveryBoys = []; // table missing — hide the column
 }
 
 // Stats
