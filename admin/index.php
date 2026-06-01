@@ -36,6 +36,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
 
         $db->prepare("UPDATE orders SET order_status=?, updated_at=NOW() WHERE id=?")->execute([$newStatus, $id]);
 
+        // COD + delivered → auto mark payment paid
+        if ($newStatus === 'delivered') {
+            $chk = $db->prepare("SELECT payment_method, payment_status FROM orders WHERE id=?");
+            $chk->execute([$id]); $chkRow = $chk->fetch();
+            if ($chkRow && $chkRow['payment_method'] === 'cod' && $chkRow['payment_status'] !== 'paid') {
+                $db->prepare("UPDATE orders SET payment_status='paid' WHERE id=?")->execute([$id]);
+            }
+        }
+
         // Fetch order for message
         $stmt = $db->prepare("SELECT * FROM orders WHERE id=?"); $stmt->execute([$id]); $order = $stmt->fetch();
 
@@ -69,7 +78,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
             $waResult = sendWhatsApp($order['phone'], $msgText);
         }
 
-        echo json_encode(['ok' => true, 'whatsapp_sent' => $waResult !== null, 'order_number' => $order['order_number'] ?? '']);
+        echo json_encode([
+            'ok'            => true,
+            'whatsapp_sent' => $waResult !== null,
+            'order_number'  => $order['order_number'] ?? '',
+            'auto_paid'     => ($newStatus === 'delivered' && ($order['payment_method'] ?? '') === 'cod'),
+        ]);
+        exit;
+    }
+
+    // COD — manually mark cash received
+    if ($_POST['ajax'] === 'mark_paid') {
+        $id = (int)$_POST['id'];
+        $db->prepare("UPDATE orders SET payment_status='paid', updated_at=NOW() WHERE id=?")->execute([$id]);
+        echo json_encode(['ok' => true]);
         exit;
     }
 
@@ -352,12 +374,22 @@ if ('Notification' in window && Notification.permission !== 'granted') {
     <?php endif; ?>
     <div class="customer-sub">📱 +<?= htmlspecialchars($o['phone']) ?></div>
     <?php if (!empty($o['delivery_address'])): ?>
-      <div class="customer-sub" style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="<?= htmlspecialchars($o['delivery_address']) ?>">
-        📍 <?= htmlspecialchars($o['delivery_address']) ?>
-      </div>
-      <?php if (!empty($o['customer_lat']) && !empty($o['customer_lng'])): ?>
+      <?php $isPickup = ($o['delivery_address'] === 'PICKUP'); ?>
+      <?php if ($isPickup): ?>
+        <div class="customer-sub"><span style="background:#f0fdf4;color:#16a34a;padding:2px 8px;border-radius:10px;font-size:10px;font-weight:700">🏠 PICKUP</span></div>
+      <?php else: ?>
+        <div class="customer-sub" style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="<?= htmlspecialchars($o['delivery_address']) ?>">
+          📍 <?= htmlspecialchars($o['delivery_address']) ?>
+        </div>
+        <?php
+          $hasCoords = !empty($o['customer_lat']) && !empty($o['customer_lng']);
+          $mapLat    = $hasCoords ? $o['customer_lat'] : '';
+          $mapLng    = $hasCoords ? $o['customer_lng'] : '';
+          $mapAddr   = htmlspecialchars(addslashes($o['delivery_address']));
+          $custName  = htmlspecialchars(addslashes($o['customer_name']));
+        ?>
         <button class="action-btn" style="margin-top:4px;color:#3b82f6;border-color:rgba(59,130,246,.3)"
-          onclick="openMap(<?= $o['customer_lat'] ?>, <?= $o['customer_lng'] ?>, '<?= htmlspecialchars(addslashes($o['customer_name'])) ?>')">
+          onclick="openMap('<?= $mapLat ?>', '<?= $mapLng ?>', '<?= $custName ?>', '<?= $mapAddr ?>')">
           🗺️ Map Dekho
         </button>
       <?php endif; ?>
@@ -378,7 +410,19 @@ if ('Notification' in window && Notification.permission !== 'granted') {
     <?php if ($o['discount_amount'] > 0): ?><div style="font-size:11px;color:var(--muted)">-₹<?= $o['discount_amount'] ?> off</div><?php endif; ?>
     <?php if ($o['delivery_charge'] > 0): ?><div style="font-size:11px;color:var(--muted)">+₹<?= $o['delivery_charge'] ?> del</div><?php endif; ?>
   </td>
-  <td><span class="badge <?= $pClass ?>"><?= $pLabel ?></span></td>
+  <td>
+    <span class="badge <?= $pClass ?>" id="pbadge-<?= $o['id'] ?>"><?= $pLabel ?></span>
+    <div style="font-size:10px;font-weight:600;margin-top:4px;color:#6b7280">
+      <?= $o['payment_method'] === 'cod' ? '💵 Cash on Delivery' : '💳 Online' ?>
+    </div>
+    <?php if ($o['payment_method'] === 'cod' && $o['payment_status'] !== 'paid'): ?>
+      <button class="action-btn" id="cashbtn-<?= $o['id'] ?>"
+        style="margin-top:5px;color:#16a34a;border-color:rgba(22,163,74,.3);font-size:10px"
+        onclick="markCashPaid(<?= $o['id'] ?>, this)">
+        💰 Cash Mila
+      </button>
+    <?php endif; ?>
+  </td>
   <td>
     <span class="badge s-<?= $o['order_status'] ?>" id="badge-<?= $o['id'] ?>"><?= strtoupper($o['order_status']) ?></span>
     <div class="wa-status" id="wa-<?= $o['id'] ?>"></div>
@@ -430,6 +474,7 @@ if ('Notification' in window && Notification.permission !== 'granted') {
       <div>
         <div style="font-size:15px;font-weight:700;color:#111">🗺️ Customer Location</div>
         <div id="mapName" style="font-size:12px;color:#6b7280;margin-top:2px"></div>
+        <div id="mapAddrText" style="font-size:11px;color:#9ca3af;margin-top:1px"></div>
       </div>
       <div style="display:flex;gap:8px;align-items:center">
         <a id="mapGoogleLink" href="#" target="_blank"
@@ -466,20 +511,30 @@ async function updateStatus(id, newStatus, selectEl) {
         const data = await res.json();
 
         if (data.ok) {
-            // Update badge
+            // Update order status badge
             badge.className = 'badge s-' + newStatus;
             badge.textContent = newStatus.toUpperCase();
+
+            // COD delivered → auto mark payment paid
+            if (data.auto_paid) {
+                const pb = document.getElementById('pbadge-' + id);
+                if (pb) { pb.className = 'badge p-paid'; pb.textContent = '✅ Paid'; }
+                const cb = document.getElementById('cashbtn-' + id);
+                if (cb) cb.remove();
+                showToast('✅ Delivered! COD payment automatically paid mark ho gaya', 'success');
+            } else if (data.whatsapp_sent) {
+                showToast('✅ Status updated + WhatsApp sent!', 'success');
+            } else {
+                showToast('✅ Status updated', 'success');
+            }
 
             if (data.whatsapp_sent) {
                 waEl.textContent = '✅ WhatsApp sent';
                 waEl.style.color = 'var(--green)';
-                showToast('✅ Status updated + WhatsApp sent!', 'success');
             } else {
-                waEl.textContent = '⚠️ WA not sent';
-                waEl.style.color = '#f59e0b';
-                showToast('✅ Status updated (no WA template)', 'success');
+                waEl.textContent = '';
             }
-            setTimeout(() => { waEl.textContent = ''; }, 5000);
+            setTimeout(() => { waEl.textContent = ''; }, 4000);
         } else {
             showToast('❌ Error: ' + data.msg, 'error');
         }
@@ -683,13 +738,23 @@ async function pollNewOrders() {
 // ============================================
 //  MAP MODAL
 // ============================================
-function openMap(lat, lng, name) {
-    document.getElementById('mapName').textContent  = name || 'Customer Location';
-    document.getElementById('mapFrame').src =
-        'https://maps.google.com/maps?q=' + lat + ',' + lng +
-        '&z=16&output=embed&hl=pa';
-    document.getElementById('mapGoogleLink').href =
-        'https://www.google.com/maps?q=' + lat + ',' + lng;
+function openMap(lat, lng, name, address) {
+    document.getElementById('mapName').textContent = name || 'Customer Location';
+    const hasCoords = lat && lng;
+    if (hasCoords) {
+        document.getElementById('mapFrame').src =
+            'https://maps.google.com/maps?q=' + lat + ',' + lng + '&z=16&output=embed&hl=pa';
+        document.getElementById('mapGoogleLink').href =
+            'https://www.google.com/maps?q=' + lat + ',' + lng;
+    } else {
+        // Text address wala fallback — Google Maps search
+        const encoded = encodeURIComponent(address);
+        document.getElementById('mapFrame').src =
+            'https://maps.google.com/maps?q=' + encoded + '&output=embed&hl=pa';
+        document.getElementById('mapGoogleLink').href =
+            'https://www.google.com/maps/search/?api=1&query=' + encoded;
+    }
+    document.getElementById('mapAddrText').textContent = address || '';
     document.getElementById('mapOverlay').classList.add('open');
 }
 function closeMap() {
@@ -699,6 +764,25 @@ function closeMap() {
 document.getElementById('mapOverlay').addEventListener('click', function(e) {
     if (e.target === this) closeMap();
 });
+
+// ---- MARK CASH PAID ----
+async function markCashPaid(id, btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳...';
+    const fd = new FormData();
+    fd.append('ajax', 'mark_paid');
+    fd.append('id', id);
+    try {
+        const res  = await fetch('index.php', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            const pb = document.getElementById('pbadge-' + id);
+            if (pb) { pb.className = 'badge p-paid'; pb.textContent = '✅ Paid'; }
+            btn.remove();
+            showToast('✅ COD payment mark ho gaya!', 'success');
+        }
+    } catch(e) { btn.disabled = false; btn.textContent = '💰 Cash Mila'; }
+}
 
 // Init
 initNotifications();
