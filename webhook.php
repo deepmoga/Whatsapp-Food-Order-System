@@ -210,7 +210,8 @@ if (str_starts_with($replyId, 'qty_')) {
         if ($item) {
             $addons = [];
             try { $addons = json_decode($session['pending_addons'] ?? 'null', true) ?: []; } catch(Exception $e) {}
-            addToCart($phone, $item, $qty, null, $addons);
+            $tmpCart = null;
+            addToCart($phone, $item, $qty, $tmpCart, $addons);
             $cart = getCart($phone);
             $del  = calculateDeliveryCharge(cartTotal($cart));
             updateSession($phone, ['state' => 'ADD_MORE', 'delivery_charge' => $del]);
@@ -546,7 +547,8 @@ switch ($state) {
                 if ($item) {
                     $addons = [];
                     try { $addons = json_decode($session['pending_addons'] ?? 'null', true) ?: []; } catch(Exception $e) {}
-                    addToCart($phone, $item, $qty, null, $addons);
+                    $tmpCart = null;
+                    addToCart($phone, $item, $qty, $tmpCart, $addons);
                     $cart = getCart($phone);
                     $del  = calculateDeliveryCharge(cartTotal($cart));
                     updateSession($phone, ['state' => 'ADD_MORE', 'delivery_charge' => $del]);
