@@ -870,41 +870,37 @@ function placeOrder($phone) {
                ->execute([$order['id']]);
         updateSession($phone, ['state' => 'ORDER_PLACED']);
 
-        // Thank you + confirmation
-        $msg  = "Order #{$order['order_number']} confirm ho gaya!\n\n";
+        // Confirmation message
+        $msg  = "✅ *Order #{$order['order_number']} confirm ho gaya!*\n\n";
         $msg .= cartSummary($cart, $discount, $delivery) . "\n\n";
-        $msg .= "Address: {$address}\n";
-        $msg .= "Cash on Delivery: Rs.{$order['total']} ready rakhna ji\n";
-        $msg .= "{$estTime} minutes mein milega\n\n";
-        $billToken = generateBillToken($order['id']);
-        $billUrl   = getBillUrl($billToken);
-        $msg .= "Shukriya {$name} ji — {$restName} choose karne da! Khaane da mazaa lena ji";
+        $msg .= "📍 Address: {$address}\n";
+        $msg .= "💵 Cash on Delivery: Rs.{$order['total']} ready rakhna ji\n";
+        $msg .= "⏱ {$estTime} minutes mein milega\n\n";
+        $msg .= "Shukriya *{$name}* ji — *{$restName}* choose karne da! 🙏";
         sendWhatsApp($phone, $msg);
 
-        $billMsg  = "Apna bill dekho ji:\n" . $billUrl . "\n\n_Print/Save laye Bill page te Print button_";
-        sendWhatsApp($phone, $billMsg);
-        $msg .= "Apna bill dekho:\n" . $billUrl;
-        sendWhatsApp($phone, $msg);
+        // Bill link
+        $billToken = generateBillToken($order['id']);
+        $billUrl   = getBillUrl($billToken);
+        sendWhatsApp($phone, "🧾 *Apna bill dekho ji:*\n" . $billUrl . "\n\n_Print/Save laye Bill page te Print button use karo_");
 
         notifyRestaurant($fullOrder, $cart);
 
     } else {
+        // Online payment — bill sirf payment confirm hone te bhejo (razorpay-webhook.php)
         updateSession($phone, ['state' => 'AWAITING_PAYMENT']);
         $payLink = createPaymentLink($order['id'], $order['order_number'], $order['total'], $phone, $name);
         if ($payLink) {
-            $msg  = "Order #{$order['order_number']} ready!\n\n";
+            $msg  = "🛒 *Order #{$order['order_number']} ready hai!*\n\n";
             $msg .= cartSummary($cart, $discount, $delivery) . "\n\n";
-            $msg .= "Address: {$address}\n\n";
-            $msg .= "Payment karo:\n{$payLink}\n\n";
-            $msg .= "Link 15 minutes valid hai";
-            sendWhatsApp($phone, $msg);
-            $billToken2 = generateBillToken($order['id']);
-            $billUrl2   = getBillUrl($billToken2);
-            sendWhatsApp($phone, "Apna bill:\n" . $billUrl2 . "\n_Print laye Bill page te Print button_");
+            $msg .= "📍 Address: {$address}\n\n";
+            $msg .= "💳 *Payment karo:*\n{$payLink}\n\n";
+            $msg .= "⏰ Link 15 minutes valid hai";
             sendWhatsApp($phone, $msg);
         } else {
             sendWhatsApp($phone, "Payment link nahi bani. Restaurant nu call karo: +" . getSetting('restaurant_phone', restPhone()));
         }
+        notifyRestaurant($fullOrder, $cart);
     }
 }
 

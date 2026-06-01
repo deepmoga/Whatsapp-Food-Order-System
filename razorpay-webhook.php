@@ -43,23 +43,36 @@ if ($type === 'payment_link.paid') {
         $order = $stmt->fetch();
 
         if ($order) {
-            $phone = $order['phone'];
-            $name  = $order['customer_name'];
-            $total = $order['total'];
-            $cart  = json_decode($order['items'], true);
+            $phone    = $order['phone'];
+            $name     = $order['customer_name'];
+            $total    = $order['total'];
+            $cart     = json_decode($order['items'], true);
+            $estTime  = getSetting('estimated_time', '30-45');
+            $restName = getSetting('restaurant_name', RESTAURANT_NAME);
 
             // ---- Customer nu confirmation ----
-            $msg  = "🎉 *Payment received! Order confirmed!*\n\n";
+            $msg  = "🎉 *Payment ho gaya! Order confirmed!*\n\n";
             $msg .= "📋 *Order #$orderNum*\n";
-            $msg .= "👤 $name ji\n\n";
+            $msg .= "👤 *$name* ji\n\n";
             foreach ($cart as $item) {
-                $msg .= "• {$item['name']} x{$item['qty']}\n";
+                $addonSum = 0;
+                if (!empty($item['addons'])) foreach ($item['addons'] as $a) $addonSum += $a['price'];
+                $itemTotal = ($item['price'] + $addonSum) * $item['qty'];
+                $msg .= "• {$item['name']} x{$item['qty']} = ₹{$itemTotal}\n";
+                if (!empty($item['addons'])) {
+                    foreach ($item['addons'] as $a) $msg .= "  ➕ {$a['name']}\n";
+                }
             }
-            $msg .= "\n💰 *Paid: ₹$total*\n";
-            $msg .= "⏱ Estimated time: *30-45 minutes*\n\n";
-            $msg .= "Khaana ready hone te inform karenge 😊\n";
-            $msg .= "Shukriya " . RESTAURANT_NAME . " choose karne da! 🙏";
+            $msg .= "\n💰 *Total Paid: ₹$total*\n";
+            $msg .= "⏱ *{$estTime} minutes* mein milega\n\n";
+            $msg .= "Khaana ready hone te dobara inform karenge 😊\n";
+            $msg .= "Shukriya *{$restName}* choose karne da! 🙏";
             sendWhatsApp($phone, $msg);
+
+            // ---- Bill link bhejo ----
+            $billToken = generateBillToken($orderId);
+            $billUrl   = getBillUrl($billToken);
+            sendWhatsApp($phone, "🧾 *Apna bill ready hai ji!*\n\n" . $billUrl . "\n\n_Print/Save laye Bill page te Print button use karo_");
 
             // ---- Restaurant nu order notification ----
             $address = $order['delivery_address'] ?? 'N/A';
