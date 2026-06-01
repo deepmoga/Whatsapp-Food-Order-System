@@ -5,6 +5,9 @@
 //  Yeh file ek baar set karo, phir admin panel use karo
 // ============================================
 
+// India timezone — server UTC hunda, IST (UTC+5:30) set karo
+date_default_timezone_set('Asia/Kolkata');
+
 // --- Database (Hostinger MySQL) ---
 define('DB_HOST',    'localhost');
 define('DB_NAME',    'food_bot');
