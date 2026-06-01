@@ -310,6 +310,12 @@ tr:hover td{background:#fafafa;}
     <a href="coupons.php">🏷 Coupons</a>
     <a href="settings.php">⚙️ Settings</a>
   </nav>
+  <button id="soundBtn" onclick="testSound()" title="Sound test karo" style="
+    margin-left:8px;background:#f3f4f6;border:1px solid #e5e7eb;
+    border-radius:8px;padding:6px 10px;cursor:pointer;font-size:16px;
+    flex-shrink:0;transition:all .2s" title="Alert sound enable/test karo">
+    🔇
+  </button>
 </div>
 
 
@@ -764,16 +770,45 @@ const POLL_INTERVAL = 12000;
 let lastOrderId    = 0;
 let notifGranted   = (typeof Notification !== 'undefined' && Notification.permission === 'granted');
 let audioCtx       = null;
-let audioUnlocked  = false;
-let alertLoop      = null;   // continuous sound interval
-let blinkLoop      = null;   // title blink interval
-let pendingOrderId = null;   // order waiting to be accepted
-let alertSeconds   = 0;      // timer counter
+let soundEnabled   = false;
+let alertLoop      = null;
+let blinkLoop      = null;
+let pendingOrderId = null;
+let alertSeconds   = 0;
 let timerInterval  = null;
 
-// Unlock audio on first user interaction
-document.addEventListener('click',   () => { audioUnlocked = true; }, { once: true });
-document.addEventListener('keydown', () => { audioUnlocked = true; }, { once: true });
+// ---- Audio unlock ----
+async function unlockAudio() {
+    try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+        soundEnabled = (audioCtx.state === 'running');
+        const btn = document.getElementById('soundBtn');
+        if (btn) {
+            btn.textContent = soundEnabled ? '🔊' : '🔇';
+            btn.style.background   = soundEnabled ? '#f0fdf4' : '#f3f4f6';
+            btn.style.borderColor  = soundEnabled ? '#86efac' : '#e5e7eb';
+            btn.title = soundEnabled ? 'Sound ON — click to test' : 'Click to enable sound';
+        }
+    } catch(e) {}
+}
+
+// Test sound + show result
+async function testSound() {
+    await unlockAudio();
+    if (soundEnabled) {
+        playBeep();
+        showToast('🔊 Sound enabled! Naye order pe alert aayega', 'success');
+    } else {
+        showToast('🔇 Sound enable nahi hua. Page pe ek baar click karo', 'error');
+    }
+}
+
+// Auto-unlock on ANY page interaction (not just once)
+document.addEventListener('click',   unlockAudio);
+document.addEventListener('keydown', unlockAudio);
+// Try on page load too (works if user navigated here by click)
+window.addEventListener('load', () => setTimeout(unlockAudio, 500));
 
 async function initNotifications() {
     if (!('Notification' in window)) return;
@@ -785,13 +820,14 @@ async function initNotifications() {
     } catch(e) {}
 }
 
-// Single alert beep (urgent triple)
-function playBeep() {
-    if (!audioUnlocked) return;
+// Urgent beep — 4 notes
+async function playBeep() {
     try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
-        [0, 250, 500, 800].forEach((delay, i) => {
+        if (audioCtx.state === 'suspended') await audioCtx.resume();
+        if (audioCtx.state !== 'running') return; // still blocked
+        soundEnabled = true;
+        [0, 220, 440, 700].forEach((delay, i) => {
             const osc  = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain); gain.connect(audioCtx.destination);
@@ -799,9 +835,9 @@ function playBeep() {
             osc.type = 'sine';
             const t = audioCtx.currentTime + delay / 1000;
             gain.gain.setValueAtTime(0, t);
-            gain.gain.linearRampToValueAtTime(0.6, t + 0.04);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
-            osc.start(t); osc.stop(t + 0.35);
+            gain.gain.linearRampToValueAtTime(0.7, t + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.38);
+            osc.start(t); osc.stop(t + 0.4);
         });
     } catch(e) {}
 }
