@@ -127,11 +127,11 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'latest_order_id') {
     exit;
 }
 
-// AJAX — new orders since id
+// AJAX — new orders since id (full details for popup)
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'new_orders') {
     header('Content-Type: application/json');
     $afterId = (int)($_GET['after'] ?? 0);
-    $rows = $db->prepare("SELECT id, order_number, customer_name, total, created_at FROM orders WHERE id > ? ORDER BY id ASC LIMIT 10");
+    $rows = $db->prepare("SELECT id, order_number, customer_name, customer_phone, phone, total, items, delivery_address, payment_method, payment_status, created_at FROM orders WHERE id > ? ORDER BY id ASC LIMIT 10");
     $rows->execute([$afterId]);
     $newOrders = $rows->fetchAll();
     $latestId  = $afterId;
@@ -467,6 +467,99 @@ if ('Notification' in window && Notification.permission !== 'granted') {
 <!-- Toast -->
 <div class="toast" id="toast"></div>
 
+<!-- ============ NEW ORDER ALERT POPUP ============ -->
+<div id="newOrderOverlay" style="
+  display:none;position:fixed;inset:0;z-index:9999;
+  background:rgba(0,0,0,.85);backdrop-filter:blur(6px);
+  align-items:center;justify-content:center;padding:16px">
+  <div id="newOrderModal" style="
+    background:#fff;border-radius:20px;width:100%;max-width:460px;
+    overflow:hidden;box-shadow:0 20px 60px rgba(0,0,0,.4);
+    animation:popIn .3s cubic-bezier(.34,1.56,.64,1)">
+
+    <!-- Pulsing header -->
+    <div id="newOrderHeader" style="
+      background:linear-gradient(135deg,#1db954,#17a349);
+      padding:20px 24px;display:flex;align-items:center;gap:14px">
+      <div style="font-size:36px;animation:ring 1s infinite">🔔</div>
+      <div>
+        <div style="font-size:18px;font-weight:800;color:#fff">Naya Order Aaya!</div>
+        <div id="newOrderNum" style="font-size:13px;color:rgba(255,255,255,.8);margin-top:2px"></div>
+      </div>
+      <div id="newOrderTimer" style="
+        margin-left:auto;background:rgba(0,0,0,.2);color:#fff;
+        border-radius:50%;width:48px;height:48px;
+        display:flex;align-items:center;justify-content:center;
+        font-size:18px;font-weight:800"></div>
+    </div>
+
+    <!-- Order details -->
+    <div style="padding:20px 24px">
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:16px">
+        <div style="background:#f8fafc;border-radius:10px;padding:12px">
+          <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Customer</div>
+          <div id="newOrderCustomer" style="font-size:14px;font-weight:700;color:#111"></div>
+          <div id="newOrderPhone" style="font-size:11px;color:#6b7280;margin-top:2px"></div>
+        </div>
+        <div style="background:#f0fdf4;border-radius:10px;padding:12px">
+          <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Total</div>
+          <div id="newOrderTotal" style="font-size:20px;font-weight:800;color:#16a34a"></div>
+          <div id="newOrderPayMethod" style="font-size:11px;color:#6b7280;margin-top:2px"></div>
+        </div>
+      </div>
+
+      <!-- Items -->
+      <div style="background:#f8fafc;border-radius:10px;padding:12px;margin-bottom:12px">
+        <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:8px">Order Items</div>
+        <div id="newOrderItems" style="font-size:13px;line-height:1.8;color:#111"></div>
+      </div>
+
+      <!-- Address -->
+      <div id="newOrderAddrWrap" style="background:#f8fafc;border-radius:10px;padding:10px 12px;margin-bottom:16px;display:none">
+        <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:4px">Delivery Address</div>
+        <div id="newOrderAddr" style="font-size:12px;color:#111"></div>
+      </div>
+
+      <!-- Action buttons -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+        <button onclick="acceptNewOrder()" style="
+          padding:13px;border-radius:10px;border:none;
+          background:#1db954;color:#fff;font-size:14px;font-weight:800;
+          cursor:pointer;font-family:inherit;
+          display:flex;align-items:center;justify-content:center;gap:8px">
+          ✅ Accept Karo
+        </button>
+        <button onclick="dismissNewOrder()" style="
+          padding:13px;border-radius:10px;border:1px solid #e5e7eb;
+          background:#fff;color:#6b7280;font-size:14px;font-weight:700;
+          cursor:pointer;font-family:inherit;
+          display:flex;align-items:center;justify-content:center;gap:8px">
+          👁️ Baad Mein
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<style>
+@keyframes popIn {
+  from { transform: scale(.7); opacity: 0; }
+  to   { transform: scale(1);  opacity: 1; }
+}
+@keyframes ring {
+  0%,100% { transform: rotate(0deg); }
+  20%      { transform: rotate(-20deg); }
+  40%      { transform: rotate(20deg); }
+  60%      { transform: rotate(-10deg); }
+  80%      { transform: rotate(10deg); }
+}
+@keyframes pulse-border {
+  0%,100% { box-shadow: 0 0 0 0 rgba(29,185,84,.6); }
+  50%      { box-shadow: 0 0 0 12px rgba(29,185,84,0); }
+}
+#newOrderModal { animation: popIn .3s ease, pulse-border 2s infinite; }
+</style>
+
 <!-- Map Modal -->
 <div class="overlay" id="mapOverlay">
   <div class="modal" style="max-width:600px;padding:0;overflow:hidden">
@@ -640,25 +733,26 @@ document.getElementById('editOverlay').addEventListener('click', function(e) {
 
 
 // ============================================
-//  WINDOW NOTIFICATIONS — New Order Alert
+//  NEW ORDER ALERT SYSTEM
 // ============================================
-const POLL_INTERVAL = 15000; // 15 seconds
+const POLL_INTERVAL = 12000;
 let lastOrderId    = 0;
 let notifGranted   = (typeof Notification !== 'undefined' && Notification.permission === 'granted');
 let audioCtx       = null;
 let audioUnlocked  = false;
+let alertLoop      = null;   // continuous sound interval
+let blinkLoop      = null;   // title blink interval
+let pendingOrderId = null;   // order waiting to be accepted
+let alertSeconds   = 0;      // timer counter
+let timerInterval  = null;
 
-// Unlock audio on first user interaction (browser requirement)
-document.addEventListener('click', () => { audioUnlocked = true; }, { once: true });
+// Unlock audio on first user interaction
+document.addEventListener('click',   () => { audioUnlocked = true; }, { once: true });
 document.addEventListener('keydown', () => { audioUnlocked = true; }, { once: true });
 
 async function initNotifications() {
     if (!('Notification' in window)) return;
-    // Already granted — just set flag and get baseline
-    if (Notification.permission === 'granted') {
-        notifGranted = true;
-    }
-    // Get current latest order id as baseline
+    if (Notification.permission === 'granted') notifGranted = true;
     try {
         const res  = await fetch('index.php?ajax=latest_order_id');
         const data = await res.json();
@@ -666,58 +760,140 @@ async function initNotifications() {
     } catch(e) {}
 }
 
-// Beep sound — triple ding
+// Single alert beep (urgent triple)
 function playBeep() {
-    if (!audioUnlocked) return; // browser blocks audio before interaction
+    if (!audioUnlocked) return;
     try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
         if (audioCtx.state === 'suspended') audioCtx.resume();
-        [0, 350, 700].forEach((delay, i) => {
+        [0, 250, 500, 800].forEach((delay, i) => {
             const osc  = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
-            osc.connect(gain);
-            gain.connect(audioCtx.destination);
-            osc.frequency.value = i === 0 ? 880 : (i === 1 ? 1046 : 1318); // Do-Mi-Sol chord
+            osc.connect(gain); gain.connect(audioCtx.destination);
+            osc.frequency.value = [880, 1046, 880, 1318][i];
             osc.type = 'sine';
             const t = audioCtx.currentTime + delay / 1000;
             gain.gain.setValueAtTime(0, t);
-            gain.gain.linearRampToValueAtTime(0.5, t + 0.05);
-            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
-            osc.start(t);
-            osc.stop(t + 0.4);
+            gain.gain.linearRampToValueAtTime(0.6, t + 0.04);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+            osc.start(t); osc.stop(t + 0.35);
         });
     } catch(e) {}
 }
 
-// Show new order notification
-function showOrderNotification(order) {
+// Start continuous alert (every 4 seconds until accepted)
+function startContinuousAlert() {
+    stopContinuousAlert(); // clear any existing
     playBeep();
+    alertLoop = setInterval(playBeep, 4000);
+
+    // Blink tab title
+    const orig = document.title;
+    let blink = true;
+    blinkLoop = setInterval(() => {
+        document.title = blink ? '🔔 NAYA ORDER!' : '⚠️ ACCEPT KARO!';
+        blink = !blink;
+    }, 600);
+
+    // Timer counter
+    alertSeconds = 0;
+    timerInterval = setInterval(() => {
+        alertSeconds++;
+        const el = document.getElementById('newOrderTimer');
+        if (el) el.textContent = alertSeconds + 's';
+    }, 1000);
+}
+
+function stopContinuousAlert() {
+    if (alertLoop)    { clearInterval(alertLoop);    alertLoop    = null; }
+    if (blinkLoop)    { clearInterval(blinkLoop);    blinkLoop    = null; }
+    if (timerInterval){ clearInterval(timerInterval);timerInterval= null; }
+    document.title = '<?= htmlspecialchars(getSetting('restaurant_name','Restaurant')) ?> — Orders';
+}
+
+// Show the popup for a new order
+function showNewOrderPopup(order) {
+    pendingOrderId = order.id;
+    const items = typeof order.items === 'string' ? JSON.parse(order.items) : order.items;
+
+    document.getElementById('newOrderNum').textContent      = 'Order #' + order.order_number;
+    document.getElementById('newOrderCustomer').textContent = order.customer_name || '—';
+    document.getElementById('newOrderPhone').textContent    = '📱 +' + order.phone;
+    document.getElementById('newOrderTotal').textContent    = '₹' + parseFloat(order.total).toFixed(0);
+    document.getElementById('newOrderPayMethod').textContent =
+        order.payment_method === 'cod' ? '💵 Cash on Delivery' : '💳 Online Payment';
+
+    // Items list
+    let itemsHtml = '';
+    if (items && items.length) {
+        items.forEach(it => {
+            itemsHtml += `<div>• <strong>${it.name}</strong> ×${it.qty} = ₹${(it.price * it.qty).toFixed(0)}</div>`;
+            if (it.addons && it.addons.length) {
+                it.addons.forEach(a => { itemsHtml += `<div style="padding-left:14px;color:#6b7280;font-size:12px">➕ ${a.name}</div>`; });
+            }
+        });
+    }
+    document.getElementById('newOrderItems').innerHTML = itemsHtml;
+
+    // Address
+    const addr = order.delivery_address;
+    if (addr && addr !== 'PICKUP') {
+        document.getElementById('newOrderAddr').textContent = addr;
+        document.getElementById('newOrderAddrWrap').style.display = 'block';
+    } else if (addr === 'PICKUP') {
+        document.getElementById('newOrderAddr').textContent = '🏠 Khud pickup karega';
+        document.getElementById('newOrderAddrWrap').style.display = 'block';
+    } else {
+        document.getElementById('newOrderAddrWrap').style.display = 'none';
+    }
+
+    // Timer reset
+    document.getElementById('newOrderTimer').textContent = '0s';
+
+    // Show overlay
+    const overlay = document.getElementById('newOrderOverlay');
+    overlay.style.display = 'flex';
+
+    startContinuousAlert();
 
     // Browser notification
     if (notifGranted) {
         try {
-            const n = new Notification('🔔 Naya Order Aaya!', {
-                body: '#' + order.order_number + '\n' + order.customer_name + ' — ₹' + order.total,
+            const n = new Notification('🔔 Naya Order — Accept Karo!', {
+                body: '#' + order.order_number + ' | ' + order.customer_name + ' | ₹' + order.total,
                 icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🍽</text></svg>',
-                tag:  'order-' + order.id,
-                requireInteraction: true,
-                silent: false,
+                tag: 'order-' + order.id, requireInteraction: true,
             });
             n.onclick = () => { window.focus(); n.close(); };
         } catch(e) {}
     }
+}
 
-    // In-page toast
-    showToast('🔔 Naya Order! #' + order.order_number + ' — ₹' + order.total, 'new-order');
+// Accept order — change status to confirmed
+async function acceptNewOrder() {
+    if (!pendingOrderId) return;
+    stopContinuousAlert();
+    document.getElementById('newOrderOverlay').style.display = 'none';
 
-    // Blink title
-    let blink = true;
-    const orig = document.title;
-    const iv = setInterval(() => {
-        document.title = blink ? '🔔 NAYA ORDER!' : orig;
-        blink = !blink;
-    }, 700);
-    setTimeout(() => { clearInterval(iv); document.title = orig; }, 12000);
+    const fd = new FormData();
+    fd.append('ajax', 'update_status');
+    fd.append('id', pendingOrderId);
+    fd.append('status', 'confirmed');
+    try {
+        await fetch('index.php', { method: 'POST', body: fd });
+        showToast('✅ Order #' + document.getElementById('newOrderNum').textContent.replace('Order #','') + ' accept ho gaya!', 'success');
+    } catch(e) {}
+
+    pendingOrderId = null;
+    setTimeout(() => location.reload(), 1500);
+}
+
+// Dismiss — just close popup but sound stops
+function dismissNewOrder() {
+    stopContinuousAlert();
+    document.getElementById('newOrderOverlay').style.display = 'none';
+    pendingOrderId = null;
+    setTimeout(() => location.reload(), 500);
 }
 
 // Poll for new orders
@@ -726,11 +902,10 @@ async function pollNewOrders() {
         const res  = await fetch('index.php?ajax=new_orders&after=' + lastOrderId);
         const data = await res.json();
         if (data.orders && data.orders.length > 0) {
-            data.orders.forEach(order => {
-                if (order.id > lastOrderId) showOrderNotification(order);
-            });
+            // Show popup for first new order (queue rest)
+            const firstNew = data.orders.find(o => o.id > lastOrderId);
+            if (firstNew) showNewOrderPopup(firstNew);
             lastOrderId = data.latest_id;
-            setTimeout(() => location.reload(), 3000);
         }
     } catch(e) {}
 }
