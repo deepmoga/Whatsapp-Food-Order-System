@@ -58,13 +58,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['install'])) {
     }
 
     if (!$errors) {
-        // ---- Create Database ----
+        // ---- Create Database (VPS/root wale laye auto, shared hosting te pehle manually banao) ----
         try {
             $testPdo->exec("CREATE DATABASE IF NOT EXISTS `{$dbName}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci");
-            $testPdo->exec("USE `{$dbName}`");
-            $log[] = "✅ Database '{$dbName}' ready";
+            $log[] = "✅ Database '{$dbName}' create/ready ho gaya (auto)";
         } catch (Exception $e) {
-            $errors[] = "Database create fail: " . $e->getMessage();
+            // Shared hosting pe CREATE DATABASE permission nahi hundi — try to use existing DB
+            $log[] = "⚠️ Database auto-create nahi hua (shared hosting) — existing DB use karda...";
+        }
+        // Try connecting to the DB directly (whether auto-created or manually created)
+        try {
+            $testPdo2 = new PDO("mysql:host={$dbHost};dbname={$dbName};charset=utf8mb4", $dbUser, $dbPass, [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION
+            ]);
+            $log[] = "✅ Database '{$dbName}' connected";
+        } catch (Exception $e) {
+            $errors[] = "Database '{$dbName}' connect nahi hua. cPanel mein pehle manually banao phir dobara try karo. Error: " . $e->getMessage();
         }
     }
 
@@ -376,7 +385,7 @@ input:focus{border-color:#1db954}
     <div class="field">
       <label>DATABASE NAAM *</label>
       <input type="text" name="db_name" placeholder="client1_foodbot" value="<?= htmlspecialchars($_POST['db_name'] ?? '') ?>" required>
-      <div class="hint">Har client laye alag DB naam rakho</div>
+      <div class="hint">⚠️ Shared hosting (cPanel): pehle manually cPanel mein DB banao, phir yahan naam likho. VPS te auto banega.</div>
     </div>
     <div class="field">
       <label>DB USERNAME *</label>
