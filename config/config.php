@@ -5,7 +5,7 @@
 //  Yeh file ek baar set karo, phir admin panel use karo
 // ============================================
 
-// India timezone — server UTC hunda, IST (UTC+5:30) set karo
+// India timezone — server UTC hunda, IST (UTC+5:30) set karo11
 date_default_timezone_set('Asia/Kolkata');
 
 // --- Database (Hostinger MySQL) ---
@@ -19,7 +19,7 @@ define('DB_CHARSET', 'utf8mb4');
 define('RESTAURANT_PHONE', '919XXXXXXXXX');
 define('VERIFY_TOKEN',     'change_this_in_admin_settings');
 define('WHATSAPP_TOKEN',   '');
-define('WHATSAPP_PHONE_ID','');
+define('WHATSAPP_PHONE_ID', '');
 define('RAZORPAY_KEY_ID',  '');
 define('RAZORPAY_KEY_SECRET', '');
 define('RAZORPAY_WEBHOOK_SECRET', '');
@@ -30,7 +30,8 @@ define('MIN_ORDER_AMOUNT', 100);
 // ============================================
 //  DATABASE CONNECTION
 // ============================================
-function getDB() {
+function getDB()
+{
     static $pdo = null;
     if ($pdo === null) {
         try {
