@@ -23,9 +23,10 @@ try {
 } catch(Exception $e) {}
 
 $msg = ''; $msgType = 'success';
+$action = ($_POST['action'] ?? '');
 
 // ---- ADD ----
-if ($_POST['action'] ?? '' === 'add') {
+if ($action === 'add') {
     $name   = trim($_POST['name'] ?? '');
     $number = preg_replace('/\D/', '', trim($_POST['whatsapp_number'] ?? ''));
     if ($name && strlen($number) >= 10) {
@@ -39,8 +40,8 @@ if ($_POST['action'] ?? '' === 'add') {
 }
 
 // ---- EDIT ----
-if ($_POST['action'] ?? '' === 'edit') {
-    $id     = (int)$_POST['id'];
+if ($action === 'edit') {
+    $id     = (int)($_POST['id'] ?? 0);
     $name   = trim($_POST['name'] ?? '');
     $number = preg_replace('/\D/', '', trim($_POST['whatsapp_number'] ?? ''));
     if ($id && $name && strlen($number) >= 10) {
@@ -53,17 +54,17 @@ if ($_POST['action'] ?? '' === 'edit') {
 }
 
 // ---- TOGGLE ACTIVE ----
-if ($_POST['action'] ?? '' === 'toggle') {
-    $id  = (int)$_POST['id'];
-    $val = (int)$_POST['is_active'];
+if ($action === 'toggle') {
+    $id  = (int)($_POST['id'] ?? 0);
+    $val = (int)($_POST['is_active'] ?? 0);
     $db->prepare("UPDATE delivery_boys SET is_active=? WHERE id=?")->execute([$val, $id]);
     $msg = $val ? "✅ Active kar dita" : "⏸ Inactive kar dita";
 }
 
 // ---- DELETE ----
-if ($_POST['action'] ?? '' === 'delete') {
-    $id = (int)$_POST['id'];
-    $db->prepare("UPDATE orders SET delivery_boy_id=NULL WHERE delivery_boy_id=?")->execute([$id]);
+if ($action === 'delete') {
+    $id = (int)($_POST['id'] ?? 0);
+    try { $db->prepare("UPDATE orders SET delivery_boy_id=NULL WHERE delivery_boy_id=?")->execute([$id]); } catch(Exception $e) {}
     $db->prepare("DELETE FROM delivery_boys WHERE id=?")->execute([$id]);
     $msg = "🗑 Delete ho gaya";
 }
@@ -178,9 +179,11 @@ tr:last-child td{border-bottom:none;}
     </thead>
     <tbody>
     <?php foreach ($boys as $b):
-      $orderCount = $db->prepare("SELECT COUNT(*) FROM orders WHERE delivery_boy_id=?");
-      $orderCount->execute([$b['id']]);
-      $cnt = $orderCount->fetchColumn();
+      try {
+          $orderCount = $db->prepare("SELECT COUNT(*) FROM orders WHERE delivery_boy_id=?");
+          $orderCount->execute([$b['id']]);
+          $cnt = $orderCount->fetchColumn();
+      } catch(Exception $e) { $cnt = 0; }
     ?>
     <tr>
       <td><strong><?= htmlspecialchars($b['name']) ?></strong></td>
