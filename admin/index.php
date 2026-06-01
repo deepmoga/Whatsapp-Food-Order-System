@@ -127,15 +127,36 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'latest_order_id') {
     exit;
 }
 
-// AJAX — new orders since id (full details for popup)
+// AJAX — live stats
+if (isset($_GET['ajax']) && $_GET['ajax'] === 'stats') {
+    header('Content-Type: application/json');
+    $s = $db->query("SELECT
+        COUNT(CASE WHEN DATE(created_at)=CURDATE() THEN 1 END) as today_orders,
+        COUNT(CASE WHEN order_status IN ('waiting','confirmed','preparing') THEN 1 END) as pending,
+        COALESCE(SUM(CASE WHEN DATE(created_at)=CURDATE() THEN total ELSE 0 END),0) as today_rev,
+        COALESCE(SUM(total),0) as total_rev
+        FROM orders")->fetch();
+    echo json_encode($s);
+    exit;
+}
+
+// AJAX — new orders since id (sirf 'waiting' status wale — duplicate popup fix)
 if (isset($_GET['ajax']) && $_GET['ajax'] === 'new_orders') {
     header('Content-Type: application/json');
     $afterId = (int)($_GET['after'] ?? 0);
-    $rows = $db->prepare("SELECT id, order_number, customer_name, customer_phone, phone, total, items, delivery_address, payment_method, payment_status, created_at FROM orders WHERE id > ? ORDER BY id ASC LIMIT 10");
+    // ONLY waiting orders — confirmed/delivered repeat nahi hone chahiye
+    $rows = $db->prepare(
+        "SELECT id, order_number, customer_name, customer_phone, phone,
+                total, items, delivery_address, payment_method, payment_status, created_at
+         FROM orders
+         WHERE id > ? AND order_status = 'waiting'
+         ORDER BY id ASC LIMIT 5"
+    );
     $rows->execute([$afterId]);
     $newOrders = $rows->fetchAll();
-    $latestId  = $afterId;
-    if (!empty($newOrders)) $latestId = (int)end($newOrders)['id'];
+    // latest_id = max ID overall (not just waiting) — so we don't re-check old IDs
+    $maxRow   = $db->query("SELECT COALESCE(MAX(id),0) as mid FROM orders")->fetch();
+    $latestId = max((int)$maxRow['mid'], $afterId);
     echo json_encode(['orders' => $newOrders, 'latest_id' => $latestId]);
     exit;
 }
@@ -766,8 +787,9 @@ document.getElementById('editOverlay').addEventListener('click', function(e) {
 // ============================================
 //  NEW ORDER ALERT SYSTEM
 // ============================================
-const POLL_INTERVAL = 12000;
-let lastOrderId    = 0;
+const POLL_INTERVAL = 10000; // 10 seconds
+// localStorage se lastOrderId — page refresh pe reset nahi hoga
+let lastOrderId    = parseInt(localStorage.getItem('adminLastOId') || '0');
 let notifGranted   = (typeof Notification !== 'undefined' && Notification.permission === 'granted');
 let audioCtx       = null;
 let soundEnabled   = false;
@@ -813,10 +835,17 @@ window.addEventListener('load', () => setTimeout(unlockAudio, 500));
 async function initNotifications() {
     if (!('Notification' in window)) return;
     if (Notification.permission === 'granted') notifGranted = true;
+
+    // Server ka latest ID le — localStorage se compare karo
     try {
         const res  = await fetch('index.php?ajax=latest_order_id');
         const data = await res.json();
-        lastOrderId = data.id || 0;
+        const serverMax = data.id || 0;
+        // Dono mein se bada use karo — taaki refresh pe purane orders na aayein
+        if (serverMax > lastOrderId) {
+            lastOrderId = serverMax;
+            localStorage.setItem('adminLastOId', lastOrderId);
+        }
     } catch(e) {}
 }
 
@@ -959,58 +988,55 @@ async function dismissNewOrder() {
 }
 
 // ============================================
-//  REAL-TIME — Server-Sent Events
+//  POLLING — Simple AJAX (SSE nahi — server load kam)
 // ============================================
-let evtSource = null;
+let pollTimer = null;
 
-function connectSSE() {
-    if (evtSource) evtSource.close();
+async function pollNewOrders() {
+    try {
+        const res  = await fetch('index.php?ajax=new_orders&after=' + lastOrderId);
+        const data = await res.json();
 
-    evtSource = new EventSource('events.php?lastId=' + lastOrderId);
+        // latest_id update — localStorage mein save karo
+        if (data.latest_id && data.latest_id > lastOrderId) {
+            lastOrderId = data.latest_id;
+            localStorage.setItem('adminLastOId', lastOrderId);
+        }
 
-    // New order event
-    evtSource.addEventListener('new_order', function(e) {
-        const order = JSON.parse(e.data);
-        if (order.id <= lastOrderId) return; // duplicate skip
-        lastOrderId = Math.max(lastOrderId, order.id);
-        showNewOrderPopup(order);
-    });
-
-    // Live stats update (no reload needed)
-    evtSource.addEventListener('stats', function(e) {
-        const s = JSON.parse(e.data);
-        const els = document.querySelectorAll('.stat .num');
-        if (els[0]) els[0].textContent = s.today_orders || 0;
-        if (els[1]) els[1].textContent = s.pending       || 0;
-        if (els[2]) els[2].textContent = '₹' + Math.round(s.today_rev || 0).toLocaleString('en-IN');
-        if (els[3]) els[3].textContent = '₹' + Math.round(s.total_rev || 0).toLocaleString('en-IN');
-    });
-
-    // Server asks to reconnect (end of 50s cycle)
-    evtSource.addEventListener('reconnect', function(e) {
-        const d = JSON.parse(e.data);
-        if (d.lastId) lastOrderId = d.lastId;
-        evtSource.close();
-        setTimeout(connectSSE, 500);
-    });
-
-    // Connection error — reconnect after 5s
-    evtSource.onerror = function() {
-        evtSource.close();
-        setTimeout(connectSSE, 5000);
-    };
+        // Sirf waiting orders dikhao
+        if (data.orders && data.orders.length > 0) {
+            data.orders.forEach(order => {
+                if (parseInt(order.id) <= lastOrderId - data.orders.length) return;
+                showNewOrderPopup(order);
+            });
+        }
+    } catch(e) {}
 }
 
-// Accept order → refresh table rows via AJAX (no full reload)
+// Stats refresh (har 15 sec — alag AJAX)
+async function refreshStats() {
+    try {
+        const res  = await fetch('index.php?ajax=stats');
+        const data = await res.json();
+        if (!data) return;
+        const els = document.querySelectorAll('.stat .num');
+        if (els[0]) els[0].textContent = data.today_orders || 0;
+        if (els[1]) els[1].textContent = data.pending       || 0;
+        if (els[2]) els[2].textContent = '₹' + Math.round(data.today_rev || 0).toLocaleString('en-IN');
+        if (els[3]) els[3].textContent = '₹' + Math.round(data.total_rev || 0).toLocaleString('en-IN');
+    } catch(e) {}
+}
+
+// Table rows refresh via AJAX (no full reload)
 async function refreshOrdersTable() {
     try {
-        const res  = await fetch('index.php?refresh_table=1');
-        const html = await res.text();
+        const res     = await fetch('index.php?refresh_table=1');
+        const html    = await res.text();
         const parser  = new DOMParser();
         const doc     = parser.parseFromString(html, 'text/html');
-        const newTbody = doc.querySelector('#ordersTable tbody');
-        const curTbody = document.querySelector('#ordersTable tbody');
-        if (newTbody && curTbody) curTbody.innerHTML = newTbody.innerHTML;
+        const newBody = doc.querySelector('#ordersTable tbody');
+        const curBody = document.querySelector('#ordersTable tbody');
+        if (newBody && curBody) curBody.innerHTML = newBody.innerHTML;
     } catch(e) {}
 }
 
@@ -1063,9 +1089,13 @@ async function markCashPaid(id, btn) {
     } catch(e) { btn.disabled = false; btn.textContent = '💰 Cash Mila'; }
 }
 
-// Init — SSE real-time (koi reload nahi!)
-initNotifications();
-connectSSE();
+// Init — polling (reliable, server-friendly)
+initNotifications().then(() => {
+    // initNotifications ke baad polling start (lastOrderId sync hone ke baad)
+    pollNewOrders();
+    setInterval(pollNewOrders, POLL_INTERVAL);
+    setInterval(refreshStats,  15000); // stats har 15 sec
+});
 </script>
 </body>
 </html>
