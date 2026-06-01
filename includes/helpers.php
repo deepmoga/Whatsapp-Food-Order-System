@@ -711,3 +711,43 @@ Kal dobara aao! Shukriya",
     };
 }
 
+// ============================================
+//  DELIVERY BOY FUNCTIONS
+// ============================================
+
+function sendDeliveryAssignment($order, $boy) {
+    $phone     = $boy['whatsapp_number'];
+    $orderId   = $order['id'];
+    $items     = json_decode($order['items'], true);
+    $itemLines = implode("\n", array_map(fn($i) => "• {$i['name']} ×{$i['qty']}", $items));
+    $payMode   = $order['payment_method'] === 'cod'
+        ? "💵 Cash on Delivery — Rs.{$order['total']} lena"
+        : "✅ Already Paid Online";
+
+    $body  = "*Customer:* {$order['customer_name']}\n";
+    $body .= "*Phone:* +{$order['customer_phone']}\n";
+    $body .= "*Address:* {$order['delivery_address']}\n\n";
+    $body .= "*Items:*\n{$itemLines}\n\n";
+    $body .= "*Total:* Rs.{$order['total']}\n";
+    $body .= "*Payment:* {$payMode}";
+
+    $buttons = [
+        "db_delivered_{$orderId}" => "✅ Delivered",
+        "db_issue_{$orderId}"     => "❌ Issue Hai",
+    ];
+
+    return sendButtonMessage(
+        $phone, $body, $buttons,
+        "🛵 Delivery #{$order['order_number']}",
+        "Deliver hone te button dabao"
+    );
+}
+
+function notifyAdminDeliveryIssue($order, $boyName) {
+    $msg  = "⚠️ *Delivery Issue!*\n\n";
+    $msg .= "Order #{$order['order_number']} — {$order['customer_name']}\n";
+    $msg .= "Delivery Boy: {$boyName}\n";
+    $msg .= "Address: {$order['delivery_address']}\n\n";
+    $msg .= "Turant contact karo ji!";
+    sendWhatsApp(restPhone(), $msg);
+}

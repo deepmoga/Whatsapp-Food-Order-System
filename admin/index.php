@@ -21,6 +21,10 @@ if (!($_SESSION['admin'] ?? false)) {
 
 $db = getDB(); $msg = '';
 
+// Load delivery boys (soft-fail if table missing)
+$deliveryBoys = [];
+try { $deliveryBoys = $db->query("SELECT * FROM delivery_boys WHERE is_active=1 ORDER BY name")->fetchAll(); } catch(Exception $e) {}
+
 // ============================================
 //  AJAX HANDLERS
 // ============================================
@@ -115,6 +119,34 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
         exit;
     }
 
+    // Assign delivery boy
+    if ($_POST['ajax'] === 'assign_delivery') {
+        $id    = (int)$_POST['id'];
+        $boyId = (int)$_POST['boy_id'];
+
+        if ($boyId === 0) {
+            $db->prepare("UPDATE orders SET delivery_boy_id=NULL, delivery_assigned_at=NULL WHERE id=?")->execute([$id]);
+            echo json_encode(['ok' => true, 'msg' => 'Unassigned']);
+            exit;
+        }
+
+        $boyStmt = $db->prepare("SELECT * FROM delivery_boys WHERE id=? AND is_active=1");
+        $boyStmt->execute([$boyId]);
+        $boy = $boyStmt->fetch();
+        if (!$boy) { echo json_encode(['ok' => false, 'msg' => 'Delivery boy nahi mila']); exit; }
+
+        $db->prepare("UPDATE orders SET delivery_boy_id=?, delivery_assigned_at=NOW() WHERE id=?")->execute([$boyId, $id]);
+
+        $oStmt = $db->prepare("SELECT * FROM orders WHERE id=?");
+        $oStmt->execute([$id]);
+        $order = $oStmt->fetch();
+
+        $waResult = sendDeliveryAssignment($order, $boy);
+
+        echo json_encode(['ok' => true, 'wa_sent' => $waResult !== null, 'boy_name' => $boy['name']]);
+        exit;
+    }
+
     echo json_encode(['ok'=>false,'msg'=>'Unknown action']); exit;
 }
 
@@ -171,7 +203,7 @@ if (isset($_GET['refresh_table'])) {
         'cod'     => "WHERE payment_method = 'cod'",
         default   => ""
     };
-    $orders = $db->query("SELECT * FROM orders {$whereClause} ORDER BY created_at DESC LIMIT 200")->fetchAll();
+    $orders = $db->query("SELECT o.*, COALESCE(db.name,'') as delivery_boy_name FROM orders o LEFT JOIN delivery_boys db ON db.id = o.delivery_boy_id {$whereClause} ORDER BY o.created_at DESC LIMIT 200")->fetchAll();
     // Return full page so JS can extract tbody
     // (falls through to normal render below)
 }
@@ -191,7 +223,7 @@ $whereClause = match($filter) {
     'cod'     => "WHERE payment_method = 'cod'",
     default   => ""
 };
-$orders = $db->query("SELECT * FROM orders {$whereClause} ORDER BY created_at DESC LIMIT 200")->fetchAll();
+$orders = $db->query("SELECT o.*, COALESCE(db.name,'') as delivery_boy_name FROM orders o LEFT JOIN delivery_boys db ON db.id = o.delivery_boy_id {$whereClause} ORDER BY o.created_at DESC LIMIT 200")->fetchAll();
 
 // Stats
 $todayOrders  = $db->query("SELECT COUNT(*) FROM orders WHERE DATE(created_at)=CURDATE()")->fetchColumn();
@@ -330,6 +362,7 @@ tr:hover td{background:#fafafa;}
     <a href="store-hours.php">🕐 Hours</a>
     <a href="coupons.php">🏷 Coupons</a>
     <a href="settings.php">⚙️ Settings</a>
+    <a href="delivery.php">🛵 Delivery Boys</a>
   </nav>
   <button id="soundBtn" onclick="testSound()" title="Sound test karo" style="
     margin-left:8px;background:#f3f4f6;border:1px solid #e5e7eb;
@@ -405,6 +438,7 @@ if ('Notification' in window) {
     <th>Total</th>
     <th>Payment</th>
     <th>Status + Action</th>
+    <?php if (!empty($deliveryBoys)): ?><th>Delivery Boy</th><?php endif; ?>
     <th>Time</th>
   </tr>
 </thead>
@@ -484,6 +518,30 @@ if ('Notification' in window) {
       <?php endforeach; ?>
     </select>
   </td>
+  <?php if (!empty($deliveryBoys)): ?>
+  <td>
+    <select class="status-select"
+            style="border-color:rgba(59,130,246,.3);color:#3b82f6;margin-top:0"
+            onchange="assignDelivery(<?= $o['id'] ?>, this.value, this)">
+      <option value="0" <?= empty($o['delivery_boy_id']) ? 'selected' : '' ?>>🛵 Assign...</option>
+      <?php foreach ($deliveryBoys as $boy): ?>
+        <option value="<?= $boy['id'] ?>" <?= ($o['delivery_boy_id'] == $boy['id']) ? 'selected' : '' ?>>
+          <?= htmlspecialchars($boy['name']) ?>
+        </option>
+      <?php endforeach; ?>
+    </select>
+    <?php if (!empty($o['delivery_boy_name'])): ?>
+      <div style="font-size:10px;color:#3b82f6;margin-top:4px;font-weight:600">
+        🛵 <?= htmlspecialchars($o['delivery_boy_name']) ?>
+        <?php if (!empty($o['delivery_assigned_at'])): ?>
+          <span style="color:#9ca3af;font-weight:400"> <?= date('h:i A', strtotime($o['delivery_assigned_at'])) ?></span>
+        <?php endif; ?>
+      </div>
+    <?php else: ?>
+      <div style="font-size:10px;color:#9ca3af;margin-top:4px">Assign nahi kita</div>
+    <?php endif; ?>
+  </td>
+  <?php endif; ?>
   <td style="white-space:nowrap;font-size:12px;color:var(--muted)">
     <?= date('d M', strtotime($o['created_at'])) ?><br>
     <?= date('h:i A', strtotime($o['created_at'])) ?>
@@ -491,7 +549,7 @@ if ('Notification' in window) {
 </tr>
 <?php endforeach; ?>
 <?php if (empty($orders)): ?>
-  <tr><td colspan="7" style="text-align:center;padding:48px;color:var(--muted)"><div style="font-size:36px;margin-bottom:12px">📋</div><div>Koi order nahi</div></td></tr>
+  <tr><td colspan="<?= !empty($deliveryBoys) ? 8 : 7 ?>" style="text-align:center;padding:48px;color:var(--muted)"><div style="font-size:36px;margin-bottom:12px">📋</div><div>Koi order nahi</div></td></tr>
 <?php endif; ?>
 </tbody>
 </table>
@@ -1087,6 +1145,31 @@ async function markCashPaid(id, btn) {
             showToast('✅ COD payment mark ho gaya!', 'success');
         }
     } catch(e) { btn.disabled = false; btn.textContent = '💰 Cash Mila'; }
+}
+
+// ---- ASSIGN DELIVERY BOY ----
+async function assignDelivery(id, boyId, selectEl) {
+    if (boyId == 0) return;
+    selectEl.disabled = true;
+    const fd = new FormData();
+    fd.append('ajax', 'assign_delivery');
+    fd.append('id', id);
+    fd.append('boy_id', boyId);
+    try {
+        const res  = await fetch('index.php', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (data.ok) {
+            const msg = data.wa_sent
+                ? '✅ ' + data.boy_name + ' nu assign kita + WhatsApp gaya!'
+                : '✅ ' + data.boy_name + ' nu assign kita';
+            showToast(msg, 'success');
+        } else {
+            showToast('❌ ' + data.msg, 'error');
+        }
+    } catch(e) {
+        showToast('❌ Network error', 'error');
+    }
+    selectEl.disabled = false;
 }
 
 // Init — polling (reliable, server-friendly)

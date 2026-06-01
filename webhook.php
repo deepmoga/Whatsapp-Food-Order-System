@@ -117,6 +117,20 @@ $session = getSession($phone);
 $state   = $session['state'];
 
 // ============================================
+//  DELIVERY BOY BUTTONS — bypass store-hours check
+// ============================================
+if (str_starts_with($replyId, 'db_delivered_')) {
+    $orderId = (int)substr($replyId, strlen('db_delivered_'));
+    handleDeliveryConfirmed($phone, $orderId);
+    http_response_code(200); echo "ok"; exit;
+}
+if (str_starts_with($replyId, 'db_issue_')) {
+    $orderId = (int)substr($replyId, strlen('db_issue_'));
+    handleDeliveryIssue($phone, $orderId);
+    http_response_code(200); echo "ok"; exit;
+}
+
+// ============================================
 //  STORE OPEN/CLOSED CHECK
 //  Exception: allow "menu", "hi", "timings" always
 //  So customer can see timings even when closed
@@ -902,6 +916,85 @@ function placeOrder($phone) {
         }
         notifyRestaurant($fullOrder, $cart);
     }
+}
+
+// ============================================
+//  DELIVERY BOY HANDLERS
+// ============================================
+function handleDeliveryConfirmed($deliveryPhone, $orderId) {
+    try {
+        $db   = getDB();
+        $stmt = $db->prepare(
+            "SELECT o.*, COALESCE(db.name,'') as boy_name
+             FROM orders o
+             LEFT JOIN delivery_boys db ON db.id = o.delivery_boy_id
+             WHERE o.id = ?"
+        );
+        $stmt->execute([$orderId]);
+        $order = $stmt->fetch();
+    } catch (Exception $e) {
+        sendWhatsApp($deliveryPhone, "System error. Admin nu dasao ji.");
+        return;
+    }
+
+    if (!$order) {
+        sendWhatsApp($deliveryPhone, "Order nahi mila.");
+        return;
+    }
+
+    $db->prepare("UPDATE orders SET order_status='delivered', updated_at=NOW() WHERE id=?")->execute([$orderId]);
+
+    if ($order['payment_method'] === 'cod' && $order['payment_status'] !== 'paid') {
+        $db->prepare("UPDATE orders SET payment_status='paid' WHERE id=?")->execute([$orderId]);
+    }
+
+    // Confirm delivery boy
+    sendWhatsApp($deliveryPhone,
+        "✅ *Order #{$order['order_number']} delivered mark ho gaya!*\n\nShukriya ji — vadiya kaam kita! 🙏"
+    );
+
+    // Thank customer
+    $reviewLink = getSetting('google_review_link', '');
+    $custMsg    = "✅ *Order #{$order['order_number']} deliver ho gaya!*\n\n";
+    $custMsg   .= "Khane da mazaa lao ji! 🍽\n\n";
+    if ($reviewLink) {
+        $custMsg .= "Thoda time kadke review zaroor dena:\n{$reviewLink}";
+    }
+    sendWhatsApp($order['phone'], $custMsg);
+
+    // Notify admin
+    $adminMsg  = "✅ *Order Delivered!*\n\n";
+    $adminMsg .= "Order #{$order['order_number']} — {$order['customer_name']}\n";
+    $adminMsg .= "Delivery: " . ($order['boy_name'] ?: 'Unknown') . "\n";
+    if ($order['payment_method'] === 'cod') {
+        $adminMsg .= "💵 COD — Cash mil gaya";
+    }
+    sendWhatsApp(restPhone(), $adminMsg);
+}
+
+function handleDeliveryIssue($deliveryPhone, $orderId) {
+    try {
+        $db   = getDB();
+        $stmt = $db->prepare(
+            "SELECT o.*, COALESCE(db.name,'') as boy_name
+             FROM orders o
+             LEFT JOIN delivery_boys db ON db.id = o.delivery_boy_id
+             WHERE o.id = ?"
+        );
+        $stmt->execute([$orderId]);
+        $order = $stmt->fetch();
+    } catch (Exception $e) {
+        sendWhatsApp($deliveryPhone, "System error. Admin nu call karo ji.");
+        return;
+    }
+
+    if (!$order) {
+        sendWhatsApp($deliveryPhone, "Order nahi mila.");
+        return;
+    }
+
+    sendWhatsApp($deliveryPhone, "⚠️ Admin nu alert bhej dita. Woh turant contact karenge ji.");
+    notifyAdminDeliveryIssue($order, $order['boy_name'] ?: 'Unknown');
 }
 
 // Add item to cart (addons = [{id, name, price}])

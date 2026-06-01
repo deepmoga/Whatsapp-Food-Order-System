@@ -253,3 +253,19 @@ CREATE TABLE IF NOT EXISTS item_addons (
 -- Add pending_addons column to sessions
 ALTER TABLE sessions
     ADD COLUMN IF NOT EXISTS pending_addons TEXT DEFAULT NULL;
+
+-- ============================================
+--  PATCH 7 — Delivery Boy System
+-- ============================================
+
+CREATE TABLE IF NOT EXISTS delivery_boys (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    whatsapp_number VARCHAR(20) NOT NULL COMMENT 'Without + e.g. 919XXXXXXXXX',
+    is_active TINYINT(1) DEFAULT 1,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+ALTER TABLE orders
+    ADD COLUMN IF NOT EXISTS delivery_boy_id INT DEFAULT NULL,
+    ADD COLUMN IF NOT EXISTS delivery_assigned_at TIMESTAMP NULL DEFAULT NULL;
