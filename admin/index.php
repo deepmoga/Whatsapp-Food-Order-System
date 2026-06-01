@@ -276,20 +276,29 @@ tr:hover td{background:#fafafa;}
 </div>
 
 
-<!-- Notification Permission Banner -->
-<div id="notifBanner" style="display:none;background:#1db954;color:#fff;padding:10px 24px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:12px;">
+<!-- Notification status bar -->
+<div id="notifBanner" style="display:none;background:#1db954;color:#fff;padding:8px 16px;font-size:13px;font-weight:600;align-items:center;gap:10px;">
   🔔 <span>Naye orders di notifications enable karo</span>
-  <button onclick="initNotifications();document.getElementById('notifBanner').style.display='none'" 
-          style="background:rgba(255,255,255,.2);border:none;color:#fff;padding:5px 14px;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">
-    Enable Karo
+  <button onclick="askNotifPermission()"
+          style="background:rgba(255,255,255,.25);border:none;color:#fff;padding:4px 14px;border-radius:6px;cursor:pointer;font-weight:700;font-family:inherit">
+    Allow Karo
   </button>
-  <button onclick="document.getElementById('notifBanner').style.display='none'" 
-          style="background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;margin-left:auto;font-size:16px">✕</button>
+  <button onclick="this.closest('#notifBanner').style.display='none'"
+          style="background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;margin-left:auto;font-size:18px;line-height:1">✕</button>
 </div>
 <script>
-// Show banner if permission not yet granted
-if ('Notification' in window && Notification.permission === 'default') {
+// Auto-request notifications on page load (no click needed)
+async function askNotifPermission() {
+    if (!('Notification' in window)) return;
+    if (Notification.permission === 'granted') { notifGranted = true; document.getElementById('notifBanner').style.display='none'; return; }
+    const p = await Notification.requestPermission();
+    notifGranted = (p === 'granted');
+    document.getElementById('notifBanner').style.display = 'none';
+}
+// Show banner only if blocked or default
+if ('Notification' in window && Notification.permission !== 'granted') {
     document.getElementById('notifBanner').style.display = 'flex';
+    if (Notification.permission === 'default') askNotifPermission();
 }
 </script>
 
@@ -346,6 +355,12 @@ if ('Notification' in window && Notification.permission === 'default') {
       <div class="customer-sub" style="max-width:160px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" title="<?= htmlspecialchars($o['delivery_address']) ?>">
         📍 <?= htmlspecialchars($o['delivery_address']) ?>
       </div>
+      <?php if (!empty($o['customer_lat']) && !empty($o['customer_lng'])): ?>
+        <button class="action-btn" style="margin-top:4px;color:#3b82f6;border-color:rgba(59,130,246,.3)"
+          onclick="openMap(<?= $o['customer_lat'] ?>, <?= $o['customer_lng'] ?>, '<?= htmlspecialchars(addslashes($o['customer_name'])) ?>')">
+          🗺️ Map Dekho
+        </button>
+      <?php endif; ?>
     <?php endif; ?>
   </td>
   <td>
@@ -407,6 +422,28 @@ if ('Notification' in window && Notification.permission === 'default') {
 
 <!-- Toast -->
 <div class="toast" id="toast"></div>
+
+<!-- Map Modal -->
+<div class="overlay" id="mapOverlay">
+  <div class="modal" style="max-width:600px;padding:0;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:16px 20px;border-bottom:1px solid #e5e7eb;">
+      <div>
+        <div style="font-size:15px;font-weight:700;color:#111">🗺️ Customer Location</div>
+        <div id="mapName" style="font-size:12px;color:#6b7280;margin-top:2px"></div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <a id="mapGoogleLink" href="#" target="_blank"
+           style="font-size:12px;font-weight:600;color:#3b82f6;text-decoration:none;padding:6px 12px;border:1px solid #bfdbfe;border-radius:8px">
+          🔗 Google Maps mein khullo
+        </a>
+        <button class="close-btn" onclick="closeMap()">✕</button>
+      </div>
+    </div>
+    <iframe id="mapFrame" src="" width="100%" height="400"
+      style="border:none;display:block" loading="lazy" allowfullscreen
+      referrerpolicy="no-referrer-when-downgrade"></iframe>
+  </div>
+</div>
 
 <script>
 let editOrderId = null;
@@ -550,19 +587,21 @@ document.getElementById('editOverlay').addEventListener('click', function(e) {
 // ============================================
 //  WINDOW NOTIFICATIONS — New Order Alert
 // ============================================
-const POLL_INTERVAL = 20000; // 20 seconds
+const POLL_INTERVAL = 15000; // 15 seconds
 let lastOrderId    = 0;
-let notifGranted   = false;
+let notifGranted   = (typeof Notification !== 'undefined' && Notification.permission === 'granted');
 let audioCtx       = null;
+let audioUnlocked  = false;
 
-// Ask permission on load
+// Unlock audio on first user interaction (browser requirement)
+document.addEventListener('click', () => { audioUnlocked = true; }, { once: true });
+document.addEventListener('keydown', () => { audioUnlocked = true; }, { once: true });
+
 async function initNotifications() {
     if (!('Notification' in window)) return;
+    // Already granted — just set flag and get baseline
     if (Notification.permission === 'granted') {
         notifGranted = true;
-    } else if (Notification.permission !== 'denied') {
-        const perm = await Notification.requestPermission();
-        notifGranted = (perm === 'granted');
     }
     // Get current latest order id as baseline
     try {
@@ -572,52 +611,58 @@ async function initNotifications() {
     } catch(e) {}
 }
 
-// Beep sound using Web Audio API
+// Beep sound — triple ding
 function playBeep() {
+    if (!audioUnlocked) return; // browser blocks audio before interaction
     try {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        // Triple beep
-        [0, 300, 600].forEach(delay => {
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        [0, 350, 700].forEach((delay, i) => {
             const osc  = audioCtx.createOscillator();
             const gain = audioCtx.createGain();
             osc.connect(gain);
             gain.connect(audioCtx.destination);
-            osc.frequency.value = 880;
+            osc.frequency.value = i === 0 ? 880 : (i === 1 ? 1046 : 1318); // Do-Mi-Sol chord
             osc.type = 'sine';
-            gain.gain.setValueAtTime(0.4, audioCtx.currentTime + delay/1000);
-            gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + delay/1000 + 0.25);
-            osc.start(audioCtx.currentTime + delay/1000);
-            osc.stop(audioCtx.currentTime + delay/1000 + 0.25);
+            const t = audioCtx.currentTime + delay / 1000;
+            gain.gain.setValueAtTime(0, t);
+            gain.gain.linearRampToValueAtTime(0.5, t + 0.05);
+            gain.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+            osc.start(t);
+            osc.stop(t + 0.4);
         });
     } catch(e) {}
 }
 
-// Show notification
+// Show new order notification
 function showOrderNotification(order) {
     playBeep();
 
     // Browser notification
     if (notifGranted) {
-        const n = new Notification('🔔 Naya Order!', {
-            body: '#' + order.order_number + ' — ' + order.customer_name + '\nRs.' + order.total,
-            icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🍽</text></svg>',
-            tag:  'order-' + order.id,
-            requireInteraction: true,
-        });
-        n.onclick = () => { window.focus(); n.close(); };
+        try {
+            const n = new Notification('🔔 Naya Order Aaya!', {
+                body: '#' + order.order_number + '\n' + order.customer_name + ' — ₹' + order.total,
+                icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">🍽</text></svg>',
+                tag:  'order-' + order.id,
+                requireInteraction: true,
+                silent: false,
+            });
+            n.onclick = () => { window.focus(); n.close(); };
+        } catch(e) {}
     }
 
-    // In-page banner
-    showToast('🔔 Naya Order! #' + order.order_number + ' — Rs.' + order.total, 'new-order');
+    // In-page toast
+    showToast('🔔 Naya Order! #' + order.order_number + ' — ₹' + order.total, 'new-order');
 
     // Blink title
     let blink = true;
     const orig = document.title;
-    const blinkInterval = setInterval(() => {
+    const iv = setInterval(() => {
         document.title = blink ? '🔔 NAYA ORDER!' : orig;
         blink = !blink;
-    }, 800);
-    setTimeout(() => { clearInterval(blinkInterval); document.title = orig; }, 10000);
+    }, 700);
+    setTimeout(() => { clearInterval(iv); document.title = orig; }, 12000);
 }
 
 // Poll for new orders
@@ -630,20 +675,35 @@ async function pollNewOrders() {
                 if (order.id > lastOrderId) showOrderNotification(order);
             });
             lastOrderId = data.latest_id;
-            // Reload table row if visible
-            if (data.orders.length > 0) {
-                setTimeout(() => location.reload(), 3000);
-            }
+            setTimeout(() => location.reload(), 3000);
         }
     } catch(e) {}
 }
 
+// ============================================
+//  MAP MODAL
+// ============================================
+function openMap(lat, lng, name) {
+    document.getElementById('mapName').textContent  = name || 'Customer Location';
+    document.getElementById('mapFrame').src =
+        'https://maps.google.com/maps?q=' + lat + ',' + lng +
+        '&z=16&output=embed&hl=pa';
+    document.getElementById('mapGoogleLink').href =
+        'https://www.google.com/maps?q=' + lat + ',' + lng;
+    document.getElementById('mapOverlay').classList.add('open');
+}
+function closeMap() {
+    document.getElementById('mapOverlay').classList.remove('open');
+    document.getElementById('mapFrame').src = '';
+}
+document.getElementById('mapOverlay').addEventListener('click', function(e) {
+    if (e.target === this) closeMap();
+});
+
 // Init
 initNotifications();
 setInterval(pollNewOrders, POLL_INTERVAL);
-
-// Auto refresh every 45 seconds
-setTimeout(() => location.reload(), 45000);
+setTimeout(() => location.reload(), 60000);
 </script>
 </body>
 </html>

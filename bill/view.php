@@ -8,7 +8,7 @@ require_once __DIR__ . '/../config/config.php';
 require_once __DIR__ . '/../includes/helpers.php';
 
 $token = trim($_GET['t'] ?? '');
-if (!$token || strlen($token) < 20) {
+if (!$token || strlen($token) < 8) {
     http_response_code(404);
     die('<div style="font-family:sans-serif;text-align:center;padding:60px;color:#666">
          <div style="font-size:48px">❌</div>

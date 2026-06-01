@@ -545,7 +545,12 @@ function logMessage($phone, $direction, $message) {
 //  BILL GENERATION
 // ============================================
 function generateBillToken($orderId) {
-    $token = bin2hex(random_bytes(24)); // 48 char secure token
+    // 12 char short alphanumeric token — e.g. "aB3xK9mR2pQw"
+    $chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    $token = '';
+    for ($i = 0; $i < 12; $i++) {
+        $token .= $chars[random_int(0, strlen($chars) - 1)];
+    }
     try {
         getDB()->exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS bill_token VARCHAR(64) DEFAULT NULL");
         getDB()->exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS bill_viewed_at TIMESTAMP NULL DEFAULT NULL");
