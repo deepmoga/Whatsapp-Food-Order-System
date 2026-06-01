@@ -151,7 +151,13 @@ if (str_starts_with($replyId, 'item_')) {
     $stmt->execute([$itemId]);
     $item = $stmt->fetch();
     if ($item) {
-        updateSession($phone, ['pending_item_id' => $itemId, 'pending_addons' => null]);
+        // Ensure addon table + session column exist
+        try { getDB()->exec("CREATE TABLE IF NOT EXISTS item_addons (id INT AUTO_INCREMENT PRIMARY KEY, item_id INT NOT NULL, name VARCHAR(100) NOT NULL, price DECIMAL(10,2) DEFAULT 0, is_active TINYINT(1) DEFAULT 1, sort_order INT DEFAULT 0)"); } catch(Exception $e) {}
+        try { getDB()->exec("ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pending_addons TEXT DEFAULT NULL"); } catch(Exception $e) {}
+
+        updateSession($phone, ['pending_item_id' => $itemId]);
+        // Reset pending_addons safely
+        try { getDB()->prepare("UPDATE sessions SET pending_addons=NULL WHERE phone=?")->execute([$phone]); } catch(Exception $e) {}
 
         // Check if this item has add-ons
         try {
@@ -202,11 +208,13 @@ if (str_starts_with($replyId, 'qty_')) {
         $stmt->execute([$itemId]);
         $item = $stmt->fetch();
         if ($item) {
-            $addons = json_decode($session['pending_addons'] ?? 'null', true) ?: [];
+            $addons = [];
+            try { $addons = json_decode($session['pending_addons'] ?? 'null', true) ?: []; } catch(Exception $e) {}
             addToCart($phone, $item, $qty, null, $addons);
             $cart = getCart($phone);
             $del  = calculateDeliveryCharge(cartTotal($cart));
-            updateSession($phone, ['state' => 'ADD_MORE', 'delivery_charge' => $del, 'pending_addons' => null]);
+            updateSession($phone, ['state' => 'ADD_MORE', 'delivery_charge' => $del]);
+            try { getDB()->prepare("UPDATE sessions SET pending_addons=NULL WHERE phone=?")->execute([$phone]); } catch(Exception $e) {}
             $addonNames = !empty($addons) ? "\n   ➕ " . implode(', ', array_column($addons, 'name')) : '';
             sendWhatsApp($phone, "✅ Added: *{$item['name']}* x{$qty}{$addonNames}\n\n" . cartSummary($cart, 0, $del));
             sendButtonMessage($phone, "Aur add karo ya order confirm karo?",
@@ -470,7 +478,8 @@ switch ($state) {
 
         if ($input === 'skip' || $input === '0') {
             // No addons selected
-            updateSession($phone, ['state' => 'SELECT_QTY', 'pending_addons' => null]);
+            updateSession($phone, ['state' => 'SELECT_QTY']);
+            try { getDB()->prepare("UPDATE sessions SET pending_addons=NULL WHERE phone=?")->execute([$phone]); } catch(Exception $e) {}
         } else {
             // Parse typed numbers e.g. "1 3" or "1,3" or "1 2 3"
             $nums = preg_split('/[\s,]+/', $input);
@@ -505,7 +514,8 @@ switch ($state) {
                 break;
             }
 
-            updateSession($phone, ['state' => 'SELECT_QTY', 'pending_addons' => json_encode($selected)]);
+            updateSession($phone, ['state' => 'SELECT_QTY']);
+            try { getDB()->prepare("UPDATE sessions SET pending_addons=? WHERE phone=?")->execute([json_encode($selected), $phone]); } catch(Exception $e) {}
 
             $addonText = implode(', ', array_map(fn($a) => $a['name'] . ($a['price'] > 0 ? " +Rs.{$a['price']}" : ''), $selected));
             sendWhatsApp($phone, "✅ Add-ons: *{$addonText}*\n\nHune qty dasao:");
@@ -534,11 +544,13 @@ switch ($state) {
                 $stmt->execute([$itemId]);
                 $item = $stmt->fetch();
                 if ($item) {
-                    $addons = json_decode($session['pending_addons'] ?? 'null', true) ?: [];
+                    $addons = [];
+                    try { $addons = json_decode($session['pending_addons'] ?? 'null', true) ?: []; } catch(Exception $e) {}
                     addToCart($phone, $item, $qty, null, $addons);
                     $cart = getCart($phone);
                     $del  = calculateDeliveryCharge(cartTotal($cart));
-                    updateSession($phone, ['state' => 'ADD_MORE', 'delivery_charge' => $del, 'pending_addons' => null]);
+                    updateSession($phone, ['state' => 'ADD_MORE', 'delivery_charge' => $del]);
+                    try { getDB()->prepare("UPDATE sessions SET pending_addons=NULL WHERE phone=?")->execute([$phone]); } catch(Exception $e) {}
                     $addonNames = !empty($addons) ? "\n   ➕ " . implode(', ', array_column($addons, 'name')) : '';
                     sendWhatsApp($phone, "✅ Added: *{$item['name']}* x{$qty}{$addonNames}\n\n" . cartSummary($cart, 0, $del));
                     sendButtonMessage($phone, "Aur add karo ya confirm?",
