@@ -234,3 +234,22 @@ INSERT INTO settings (setting_key, setting_value, description) VALUES
 ('store_closed_msg',   'Sorry ji, abhi restaurant band hai.\n\nHumari timings:\n{timings}\n\nKal zaroor aana!', 'Closed hone te message'),
 ('store_timezone',     'Asia/Kolkata',               'Timezone for store hours')
 ON DUPLICATE KEY UPDATE setting_key = setting_key;
+
+-- ============================================
+--  PATCH 6 — Item Add-ons / Toppings
+-- ============================================
+
+-- Add-ons table (e.g. Extra Cheese, Toppings for pizza)
+CREATE TABLE IF NOT EXISTS item_addons (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    item_id INT NOT NULL,
+    name VARCHAR(100) NOT NULL,
+    price DECIMAL(10,2) DEFAULT 0.00,
+    is_active TINYINT(1) DEFAULT 1,
+    sort_order INT DEFAULT 0,
+    FOREIGN KEY (item_id) REFERENCES menu_items(id) ON DELETE CASCADE
+);
+
+-- Add pending_addons column to sessions
+ALTER TABLE sessions
+    ADD COLUMN IF NOT EXISTS pending_addons TEXT DEFAULT NULL;

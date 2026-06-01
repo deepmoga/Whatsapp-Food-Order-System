@@ -144,22 +144,48 @@ if (str_starts_with($replyId, 'cat_')) {
     http_response_code(200); echo "ok"; exit;
 }
 
-// Item selected from list — ask quantity
+// Item selected from list — check addons first, then ask quantity
 if (str_starts_with($replyId, 'item_')) {
     $itemId = (int)str_replace('item_', '', $replyId);
     $stmt   = getDB()->prepare("SELECT * FROM menu_items WHERE id=? AND is_available=1");
     $stmt->execute([$itemId]);
     $item = $stmt->fetch();
     if ($item) {
-        updateSession($phone, ['state' => 'SELECT_QTY', 'pending_item_id' => $itemId]);
-        // Show qty buttons + option to add multiple
-        sendButtonMessage(
-            $phone,
-            "*{$item['name']}*\nRs.{$item['price']} per plate\n\nKitni qty chahidi?\n(Ya seedha type karo: 1, 2, 3...)",
-            ['qty_1' => '1 Plate', 'qty_2' => '2 Plates', 'qty_3' => '3 Plates'],
-            "Quantity Choose Karo",
-            "Zyada leni? Type karo e.g. 5"
-        );
+        updateSession($phone, ['pending_item_id' => $itemId, 'pending_addons' => null]);
+
+        // Check if this item has add-ons
+        try {
+            $adStmt = getDB()->prepare("SELECT * FROM item_addons WHERE item_id=? AND is_active=1 ORDER BY sort_order, id");
+            $adStmt->execute([$itemId]);
+            $addons = $adStmt->fetchAll();
+        } catch(Exception $e) { $addons = []; }
+
+        if (!empty($addons)) {
+            // Show addon selection
+            $msg = "*{$item['name']}* — Rs.{$item['price']}\n\n";
+            $msg .= "➕ *Add-ons available hain:*\n";
+            $i = 1;
+            foreach ($addons as $a) {
+                $priceStr = $a['price'] > 0 ? " (+Rs.{$a['price']})" : " (Free)";
+                $msg .= "{$i}. {$a['name']}{$priceStr}\n";
+                $i++;
+            }
+            $msg .= "\n*Number(s) type karo* jido add-on chahide:\n";
+            $msg .= "Example: _1 3_ (1st aur 3rd)\n";
+            $msg .= "Ya _skip_ type karo koi add-on nahi chahida";
+            updateSession($phone, ['state' => 'SELECT_ADDON']);
+            sendWhatsApp($phone, $msg);
+        } else {
+            // No addons — directly ask qty
+            updateSession($phone, ['state' => 'SELECT_QTY']);
+            sendButtonMessage(
+                $phone,
+                "*{$item['name']}*\nRs.{$item['price']} per plate\n\nKitni qty chahidi?\n(Ya seedha type karo: 1, 2, 3...)",
+                ['qty_1' => '1 Plate', 'qty_2' => '2 Plates', 'qty_3' => '3 Plates'],
+                "Quantity Choose Karo",
+                "Zyada leni? Type karo e.g. 5"
+            );
+        }
     } else {
         sendWhatsApp($phone, "Item nahi mila. Dobara try karo.");
         sendCategoryMenu($phone);
@@ -176,11 +202,13 @@ if (str_starts_with($replyId, 'qty_')) {
         $stmt->execute([$itemId]);
         $item = $stmt->fetch();
         if ($item) {
-            addToCart($phone, $item, $qty);
+            $addons = json_decode($session['pending_addons'] ?? 'null', true) ?: [];
+            addToCart($phone, $item, $qty, null, $addons);
             $cart = getCart($phone);
             $del  = calculateDeliveryCharge(cartTotal($cart));
-            updateSession($phone, ['state' => 'ADD_MORE', 'delivery_charge' => $del]);
-            sendWhatsApp($phone, "Added: *{$item['name']}* x{$qty}\n\n" . cartSummary($cart, 0, $del));
+            updateSession($phone, ['state' => 'ADD_MORE', 'delivery_charge' => $del, 'pending_addons' => null]);
+            $addonNames = !empty($addons) ? "\n   ➕ " . implode(', ', array_column($addons, 'name')) : '';
+            sendWhatsApp($phone, "✅ Added: *{$item['name']}* x{$qty}{$addonNames}\n\n" . cartSummary($cart, 0, $del));
             sendButtonMessage($phone, "Aur add karo ya order confirm karo?",
                 ['btn_confirm' => 'Confirm Order', 'btn_addmore' => 'Aur Add Karo', 'btn_editcart' => 'Edit Cart']);
         }
@@ -435,6 +463,67 @@ switch ($state) {
         sendCategoryMenu($phone);
         break;
 
+    // SELECT_ADDON — customer types addon numbers or "skip"
+    case 'SELECT_ADDON':
+        $itemId = (int)($session['pending_item_id'] ?? 0);
+        $input  = strtolower(trim($msgRaw));
+
+        if ($input === 'skip' || $input === '0') {
+            // No addons selected
+            updateSession($phone, ['state' => 'SELECT_QTY', 'pending_addons' => null]);
+        } else {
+            // Parse typed numbers e.g. "1 3" or "1,3" or "1 2 3"
+            $nums = preg_split('/[\s,]+/', $input);
+            $nums = array_filter(array_map('intval', $nums), fn($n) => $n > 0);
+
+            if (empty($nums)) {
+                sendWhatsApp($phone, "Add-on numbers type karo (e.g. _1 2_) ya _skip_ type karo.");
+                break;
+            }
+
+            // Fetch selected addons from DB
+            try {
+                $adStmt = getDB()->prepare("SELECT * FROM item_addons WHERE item_id=? AND is_active=1 ORDER BY sort_order, id");
+                $adStmt->execute([$itemId]);
+                $allAddons = $adStmt->fetchAll();
+            } catch(Exception $e) { $allAddons = []; }
+
+            $selected = [];
+            foreach ($nums as $n) {
+                $idx = $n - 1;
+                if (isset($allAddons[$idx])) {
+                    $selected[] = [
+                        'id'    => $allAddons[$idx]['id'],
+                        'name'  => $allAddons[$idx]['name'],
+                        'price' => (float)$allAddons[$idx]['price'],
+                    ];
+                }
+            }
+
+            if (empty($selected)) {
+                sendWhatsApp($phone, "Galat number dita. Sahi number type karo ya _skip_ likho.");
+                break;
+            }
+
+            updateSession($phone, ['state' => 'SELECT_QTY', 'pending_addons' => json_encode($selected)]);
+
+            $addonText = implode(', ', array_map(fn($a) => $a['name'] . ($a['price'] > 0 ? " +Rs.{$a['price']}" : ''), $selected));
+            sendWhatsApp($phone, "✅ Add-ons: *{$addonText}*\n\nHune qty dasao:");
+        }
+
+        // Show qty buttons
+        $stmt2 = getDB()->prepare("SELECT * FROM menu_items WHERE id=? AND is_available=1");
+        $stmt2->execute([$itemId]);
+        $item2 = $stmt2->fetch();
+        if ($item2) {
+            sendButtonMessage($phone,
+                "*{$item2['name']}*\nRs.{$item2['price']}/plate\n\nKitni qty chahidi?",
+                ['qty_1' => '1 Plate', 'qty_2' => '2 Plates', 'qty_3' => '3 Plates'],
+                "Quantity", "Zyada? Type karo e.g. 5"
+            );
+        }
+        break;
+
     // SELECT_QTY — customer typed number manually
     case 'SELECT_QTY':
         if (is_numeric($msgText) && (int)$msgText > 0) {
@@ -445,11 +534,13 @@ switch ($state) {
                 $stmt->execute([$itemId]);
                 $item = $stmt->fetch();
                 if ($item) {
-                    addToCart($phone, $item, $qty);
+                    $addons = json_decode($session['pending_addons'] ?? 'null', true) ?: [];
+                    addToCart($phone, $item, $qty, null, $addons);
                     $cart = getCart($phone);
                     $del  = calculateDeliveryCharge(cartTotal($cart));
-                    updateSession($phone, ['state' => 'ADD_MORE', 'delivery_charge' => $del]);
-                    sendWhatsApp($phone, "Added: *{$item['name']}* x{$qty}\n\n" . cartSummary($cart, 0, $del));
+                    updateSession($phone, ['state' => 'ADD_MORE', 'delivery_charge' => $del, 'pending_addons' => null]);
+                    $addonNames = !empty($addons) ? "\n   ➕ " . implode(', ', array_column($addons, 'name')) : '';
+                    sendWhatsApp($phone, "✅ Added: *{$item['name']}* x{$qty}{$addonNames}\n\n" . cartSummary($cart, 0, $del));
                     sendButtonMessage($phone, "Aur add karo ya confirm?",
                         ['btn_confirm' => 'Confirm Order', 'btn_addmore' => 'Aur Add Karo', 'btn_editcart' => 'Edit Cart']);
                 }
@@ -803,22 +894,34 @@ function placeOrder($phone) {
     }
 }
 
-// Add item to cart
-function addToCart($phone, $item, $qty, &$cart = null) {
+// Add item to cart (addons = [{id, name, price}])
+function addToCart($phone, $item, $qty, &$cart = null, $addons = []) {
     $own = ($cart === null);
     if ($own) $cart = getCart($phone);
+
+    // Items with addons → always new entry (different customization)
+    // Items without addons → merge if same item exists without addons
     $found = false;
-    foreach ($cart as &$ci) {
-        if ($ci['id'] == $item['id']) { $ci['qty'] += $qty; $found = true; break; }
+    if (empty($addons)) {
+        foreach ($cart as &$ci) {
+            if ($ci['id'] == $item['id'] && empty($ci['addons'])) {
+                $ci['qty'] += $qty;
+                $found = true;
+                break;
+            }
+        }
+        unset($ci);
     }
-    unset($ci);
+
     if (!$found) {
-        $cart[] = [
+        $entry = [
             'id'    => $item['id'],
             'name'  => $item['name'],
             'price' => (float)$item['price'],
-            'qty'   => $qty
+            'qty'   => $qty,
         ];
+        if (!empty($addons)) $entry['addons'] = $addons;
+        $cart[] = $entry;
     }
     if ($own) saveCart($phone, $cart);
 }

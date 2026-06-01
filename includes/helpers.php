@@ -170,7 +170,15 @@ function saveCart($phone, $cart) {
 }
 
 function cartTotal($cart) {
-    return array_sum(array_map(fn($i) => $i['price'] * $i['qty'], $cart));
+    $total = 0;
+    foreach ($cart as $item) {
+        $addonSum = 0;
+        if (!empty($item['addons'])) {
+            foreach ($item['addons'] as $a) { $addonSum += $a['price']; }
+        }
+        $total += ($item['price'] + $addonSum) * $item['qty'];
+    }
+    return $total;
 }
 
 function cartSummary($cart, $discount = 0, $deliveryCharge = 0) {
@@ -179,7 +187,19 @@ function cartSummary($cart, $discount = 0, $deliveryCharge = 0) {
     $lines = ["*Tera Order:*\n"];
     $i = 1;
     foreach ($cart as $item) {
-        $lines[] = "{$i}. {$item['name']} x{$item['qty']} = Rs." . ($item['price'] * $item['qty']);
+        $itemTotal = $item['price'] * $item['qty'];
+        // Add addon prices to item total
+        $addonTotal = 0;
+        if (!empty($item['addons'])) {
+            foreach ($item['addons'] as $a) { $addonTotal += $a['price']; }
+            $itemTotal = ($item['price'] + $addonTotal) * $item['qty'];
+        }
+        $lines[] = "{$i}. {$item['name']} x{$item['qty']} = Rs." . $itemTotal;
+        if (!empty($item['addons'])) {
+            foreach ($item['addons'] as $a) {
+                $lines[] = "   ➕ {$a['name']}" . ($a['price'] > 0 ? " (+Rs.{$a['price']})" : "");
+            }
+        }
         $i++;
     }
     $lines[] = "\nSubtotal: Rs.{$bd['subtotal']}";

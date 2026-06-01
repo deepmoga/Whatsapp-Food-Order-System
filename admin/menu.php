@@ -97,6 +97,58 @@ if ($action === 'delete_item') {
     $msg = "Item delete ho gaya!";
 }
 
+// ---- Addon: Add ----
+if ($action === 'add_addon') {
+    $itemId = (int)$_POST['item_id'];
+    $name   = trim($_POST['addon_name'] ?? '');
+    $price  = (float)($_POST['addon_price'] ?? 0);
+    $sort   = (int)($_POST['addon_sort'] ?? 0);
+    if ($name && $itemId) {
+        try {
+            $db->exec("CREATE TABLE IF NOT EXISTS item_addons (id INT AUTO_INCREMENT PRIMARY KEY, item_id INT NOT NULL, name VARCHAR(100) NOT NULL, price DECIMAL(10,2) DEFAULT 0, is_active TINYINT(1) DEFAULT 1, sort_order INT DEFAULT 0)");
+            $db->prepare("INSERT INTO item_addons (item_id, name, price, sort_order) VALUES (?,?,?,?)")
+               ->execute([$itemId, $name, $price, $sort]);
+            $msg = "Add-on '{$name}' add ho gaya!";
+        } catch(Exception $e) { $err = "Error: " . $e->getMessage(); }
+    } else { $err = "Naam zaroori hai."; }
+}
+
+// ---- Addon: Delete ----
+if ($action === 'delete_addon') {
+    $id = (int)($_GET['id'] ?? 0);
+    $returnItem = (int)($_GET['item_id'] ?? 0);
+    $db->prepare("DELETE FROM item_addons WHERE id=?")->execute([$id]);
+    $msg = "Add-on delete ho gaya!";
+    if ($returnItem) header("Location: ?addons={$returnItem}#addon-modal");
+    exit;
+}
+
+// ---- Addon: Toggle ----
+if ($action === 'toggle_addon') {
+    $id  = (int)($_GET['id'] ?? 0);
+    $val = (int)($_GET['val'] ?? 0);
+    $returnItem = (int)($_GET['item_id'] ?? 0);
+    $db->prepare("UPDATE item_addons SET is_active=? WHERE id=?")->execute([$val, $id]);
+    if ($returnItem) header("Location: ?addons={$returnItem}#addon-modal");
+    exit;
+}
+
+// Fetch addons for modal
+$addonItem   = null;
+$addonList   = [];
+if (isset($_GET['addons'])) {
+    $addonItemId = (int)$_GET['addons'];
+    $s = $db->prepare("SELECT * FROM menu_items WHERE id=?");
+    $s->execute([$addonItemId]);
+    $addonItem = $s->fetch();
+    try {
+        $db->exec("CREATE TABLE IF NOT EXISTS item_addons (id INT AUTO_INCREMENT PRIMARY KEY, item_id INT NOT NULL, name VARCHAR(100) NOT NULL, price DECIMAL(10,2) DEFAULT 0, is_active TINYINT(1) DEFAULT 1, sort_order INT DEFAULT 0)");
+        $s2 = $db->prepare("SELECT * FROM item_addons WHERE item_id=? ORDER BY sort_order, id");
+        $s2->execute([$addonItemId]);
+        $addonList = $s2->fetchAll();
+    } catch(Exception $e) { $addonList = []; }
+}
+
 // ============================================
 //  FETCH DATA
 // ============================================
@@ -480,6 +532,7 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
           <td>
             <div class="actions-cell">
               <a href="?edit_item=<?= $item['id'] ?>#item-modal" class="btn btn-outline" style="padding:5px 12px;font-size:11px">✏️ Edit</a>
+              <a href="?addons=<?= $item['id'] ?>#addon-modal" class="btn btn-outline" style="padding:5px 10px;font-size:11px;color:#7c3aed;border-color:rgba(124,58,237,.3)" title="Add-ons manage karo">➕ Add-ons</a>
               <?php if ($item['is_available']): ?>
                 <a href="?action=toggle_item&id=<?= $item['id'] ?>&val=0" class="btn btn-outline" style="padding:5px 10px;font-size:11px;color:#e57373;border-color:rgba(229,57,53,.3)" title="Disable">⛔</a>
               <?php else: ?>
@@ -576,6 +629,81 @@ body { font-family: 'Plus Jakarta Sans', sans-serif; background: var(--bg); colo
         <button type="submit" class="btn btn-green">Save Changes</button>
       </div>
     </form>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- ===========================
+     ADD-ONS MODAL
+     =========================== -->
+<?php if ($addonItem): ?>
+<div class="modal-overlay" id="addon-modal">
+  <div class="modal" style="max-width:560px">
+    <div class="modal-header">
+      <div>
+        <h2>➕ Add-ons Manage Karo</h2>
+        <div style="font-size:12px;color:var(--muted);margin-top:3px">
+          <?= htmlspecialchars($addonItem['name']) ?> — ₹<?= number_format($addonItem['price'],0) ?>
+        </div>
+      </div>
+      <a href="menu.php"><button class="modal-close">✕</button></a>
+    </div>
+
+    <!-- Add new addon form -->
+    <form method="POST" style="background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:14px;margin-bottom:16px">
+      <input type="hidden" name="action" value="add_addon">
+      <input type="hidden" name="item_id" value="<?= $addonItem['id'] ?>">
+      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:10px">Naya Add-on Add Karo</div>
+      <div style="display:grid;grid-template-columns:1fr 100px 70px;gap:8px;align-items:end">
+        <div class="field" style="margin:0">
+          <label>NAAM *</label>
+          <input type="text" name="addon_name" placeholder="e.g. Extra Cheese" required>
+        </div>
+        <div class="field" style="margin:0">
+          <label>PRICE (₹)</label>
+          <input type="number" name="addon_price" placeholder="50" min="0" step="0.01" value="0">
+        </div>
+        <div class="field" style="margin:0">
+          <label>SORT</label>
+          <input type="number" name="addon_sort" value="<?= count($addonList)+1 ?>" min="1">
+        </div>
+      </div>
+      <button type="submit" class="btn btn-green" style="margin-top:10px;width:100%;justify-content:center">➕ Add Karo</button>
+    </form>
+
+    <!-- Existing addons list -->
+    <?php if (empty($addonList)): ?>
+      <div style="text-align:center;padding:24px;color:#6b7280;font-size:13px">
+        Koi add-on nahi — upar se add karo
+      </div>
+    <?php else: ?>
+      <div style="font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:8px">
+        Current Add-ons (<?= count($addonList) ?>)
+      </div>
+      <?php foreach ($addonList as $ad): ?>
+      <div style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:#fff;border:1px solid #e5e7eb;border-radius:8px;margin-bottom:6px;<?= !$ad['is_active'] ? 'opacity:.5' : '' ?>">
+        <div style="flex:1">
+          <div style="font-size:13px;font-weight:600;color:#111"><?= htmlspecialchars($ad['name']) ?></div>
+          <div style="font-size:11px;color:#6b7280"><?= $ad['price'] > 0 ? '+₹'.$ad['price'] : 'Free' ?></div>
+        </div>
+        <span style="font-size:10px;padding:2px 8px;border-radius:10px;font-weight:700;<?= $ad['is_active'] ? 'background:#dcfce7;color:#16a34a' : 'background:#f3f4f6;color:#6b7280' ?>">
+          <?= $ad['is_active'] ? 'ON' : 'OFF' ?>
+        </span>
+        <?php if ($ad['is_active']): ?>
+          <a href="?action=toggle_addon&id=<?= $ad['id'] ?>&val=0&item_id=<?= $addonItem['id'] ?>" class="btn btn-outline" style="padding:4px 8px;font-size:10px" title="Disable">⛔</a>
+        <?php else: ?>
+          <a href="?action=toggle_addon&id=<?= $ad['id'] ?>&val=1&item_id=<?= $addonItem['id'] ?>" class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:var(--green)" title="Enable">✅</a>
+        <?php endif; ?>
+        <a href="?action=delete_addon&id=<?= $ad['id'] ?>&item_id=<?= $addonItem['id'] ?>"
+           class="btn btn-outline" style="padding:4px 8px;font-size:10px;color:#ef5350"
+           onclick="return confirm('Delete karo?')">🗑️</a>
+      </div>
+      <?php endforeach; ?>
+    <?php endif; ?>
+
+    <div class="modal-footer">
+      <a href="menu.php" class="btn btn-outline">Close</a>
+    </div>
   </div>
 </div>
 <?php endif; ?>
