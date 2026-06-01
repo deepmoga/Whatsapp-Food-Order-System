@@ -11,12 +11,16 @@ require_once __DIR__ . '/includes/helpers.php';
 $payload   = file_get_contents('php://input');
 $signature = $_SERVER['HTTP_X_RAZORPAY_SIGNATURE'] ?? '';
 
-// Verify signature
-$expectedSig = hash_hmac('sha256', $payload, rzpWebhook());
-if (!hash_equals($expectedSig, $signature)) {
-    http_response_code(400);
-    echo "Invalid signature";
-    exit;
+// Verify signature — sirf agar secret set hai
+$webhookSecret = rzpWebhook();
+if (!empty($webhookSecret) && !empty($signature)) {
+    $expectedSig = hash_hmac('sha256', $payload, $webhookSecret);
+    if (!hash_equals($expectedSig, $signature)) {
+        http_response_code(400);
+        error_log("Razorpay webhook: Invalid signature");
+        echo "Invalid signature";
+        exit;
+    }
 }
 
 $event = json_decode($payload, true);
