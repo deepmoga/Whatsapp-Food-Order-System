@@ -140,6 +140,21 @@ if (isset($_GET['ajax']) && $_GET['ajax'] === 'new_orders') {
     exit;
 }
 
+// Table refresh (partial HTML — sirf tbody)
+if (isset($_GET['refresh_table'])) {
+    $filter = $_GET['filter'] ?? 'today';
+    $whereClause = match($filter) {
+        'today'   => "WHERE DATE(created_at) = CURDATE()",
+        'pending' => "WHERE order_status IN ('waiting','confirmed','preparing')",
+        'paid'    => "WHERE payment_status = 'paid'",
+        'cod'     => "WHERE payment_method = 'cod'",
+        default   => ""
+    };
+    $orders = $db->query("SELECT * FROM orders {$whereClause} ORDER BY created_at DESC LIMIT 200")->fetchAll();
+    // Return full page so JS can extract tbody
+    // (falls through to normal render below)
+}
+
 // Status update (non-ajax fallback)
 if (isset($_GET['status']) && isset($_GET['id'])) {
     $db->prepare("UPDATE orders SET order_status=? WHERE id=?")->execute([$_GET['status'], (int)$_GET['id']]);
@@ -309,18 +324,28 @@ tr:hover td{background:#fafafa;}
           style="background:none;border:none;color:rgba(255,255,255,.7);cursor:pointer;margin-left:auto;font-size:18px;line-height:1">✕</button>
 </div>
 <script>
-// Auto-request notifications on page load (no click needed)
 async function askNotifPermission() {
     if (!('Notification' in window)) return;
-    if (Notification.permission === 'granted') { notifGranted = true; document.getElementById('notifBanner').style.display='none'; return; }
+    if (Notification.permission === 'granted') {
+        notifGranted = true;
+        localStorage.setItem('notifAsked', '1');
+        document.getElementById('notifBanner').style.display = 'none';
+        return;
+    }
     const p = await Notification.requestPermission();
     notifGranted = (p === 'granted');
+    localStorage.setItem('notifAsked', '1');
     document.getElementById('notifBanner').style.display = 'none';
 }
-// Show banner only if blocked or default
-if ('Notification' in window && Notification.permission !== 'granted') {
-    document.getElementById('notifBanner').style.display = 'flex';
-    if (Notification.permission === 'default') askNotifPermission();
+// Show banner only once — LocalStorage mein yaad rakhdo
+if ('Notification' in window) {
+    if (Notification.permission === 'granted') {
+        notifGranted = true;
+        document.getElementById('notifBanner').style.display = 'none';
+    } else if (!localStorage.getItem('notifAsked')) {
+        document.getElementById('notifBanner').style.display = 'flex';
+        askNotifPermission();
+    }
 }
 </script>
 
@@ -869,7 +894,7 @@ function showNewOrderPopup(order) {
     }
 }
 
-// Accept order — change status to confirmed
+// Accept order — status confirmed + table refresh (NO page reload)
 async function acceptNewOrder() {
     if (!pendingOrderId) return;
     stopContinuousAlert();
@@ -880,33 +905,76 @@ async function acceptNewOrder() {
     fd.append('id', pendingOrderId);
     fd.append('status', 'confirmed');
     try {
-        await fetch('index.php', { method: 'POST', body: fd });
-        showToast('✅ Order #' + document.getElementById('newOrderNum').textContent.replace('Order #','') + ' accept ho gaya!', 'success');
+        const res  = await fetch('index.php', { method: 'POST', body: fd });
+        const data = await res.json();
+        showToast('✅ Order accepted! WhatsApp message gaya', 'success');
+        await refreshOrdersTable(); // sirf table update, page reload nahi
     } catch(e) {}
 
     pendingOrderId = null;
-    setTimeout(() => location.reload(), 1500);
 }
 
-// Dismiss — just close popup but sound stops
-function dismissNewOrder() {
+// Dismiss — close popup, sound band, table refresh
+async function dismissNewOrder() {
     stopContinuousAlert();
     document.getElementById('newOrderOverlay').style.display = 'none';
     pendingOrderId = null;
-    setTimeout(() => location.reload(), 500);
+    await refreshOrdersTable();
 }
 
-// Poll for new orders
-async function pollNewOrders() {
+// ============================================
+//  REAL-TIME — Server-Sent Events
+// ============================================
+let evtSource = null;
+
+function connectSSE() {
+    if (evtSource) evtSource.close();
+
+    evtSource = new EventSource('events.php?lastId=' + lastOrderId);
+
+    // New order event
+    evtSource.addEventListener('new_order', function(e) {
+        const order = JSON.parse(e.data);
+        if (order.id <= lastOrderId) return; // duplicate skip
+        lastOrderId = Math.max(lastOrderId, order.id);
+        showNewOrderPopup(order);
+    });
+
+    // Live stats update (no reload needed)
+    evtSource.addEventListener('stats', function(e) {
+        const s = JSON.parse(e.data);
+        const els = document.querySelectorAll('.stat .num');
+        if (els[0]) els[0].textContent = s.today_orders || 0;
+        if (els[1]) els[1].textContent = s.pending       || 0;
+        if (els[2]) els[2].textContent = '₹' + Math.round(s.today_rev || 0).toLocaleString('en-IN');
+        if (els[3]) els[3].textContent = '₹' + Math.round(s.total_rev || 0).toLocaleString('en-IN');
+    });
+
+    // Server asks to reconnect (end of 50s cycle)
+    evtSource.addEventListener('reconnect', function(e) {
+        const d = JSON.parse(e.data);
+        if (d.lastId) lastOrderId = d.lastId;
+        evtSource.close();
+        setTimeout(connectSSE, 500);
+    });
+
+    // Connection error — reconnect after 5s
+    evtSource.onerror = function() {
+        evtSource.close();
+        setTimeout(connectSSE, 5000);
+    };
+}
+
+// Accept order → refresh table rows via AJAX (no full reload)
+async function refreshOrdersTable() {
     try {
-        const res  = await fetch('index.php?ajax=new_orders&after=' + lastOrderId);
-        const data = await res.json();
-        if (data.orders && data.orders.length > 0) {
-            // Show popup for first new order (queue rest)
-            const firstNew = data.orders.find(o => o.id > lastOrderId);
-            if (firstNew) showNewOrderPopup(firstNew);
-            lastOrderId = data.latest_id;
-        }
+        const res  = await fetch('index.php?refresh_table=1');
+        const html = await res.text();
+        const parser  = new DOMParser();
+        const doc     = parser.parseFromString(html, 'text/html');
+        const newTbody = doc.querySelector('#ordersTable tbody');
+        const curTbody = document.querySelector('#ordersTable tbody');
+        if (newTbody && curTbody) curTbody.innerHTML = newTbody.innerHTML;
     } catch(e) {}
 }
 
@@ -959,10 +1027,9 @@ async function markCashPaid(id, btn) {
     } catch(e) { btn.disabled = false; btn.textContent = '💰 Cash Mila'; }
 }
 
-// Init
+// Init — SSE real-time (koi reload nahi!)
 initNotifications();
-setInterval(pollNewOrders, POLL_INTERVAL);
-setTimeout(() => location.reload(), 60000);
+connectSSE();
 </script>
 </body>
 </html>
