@@ -124,6 +124,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['ajax'])) {
         $id    = (int)$_POST['id'];
         $boyId = (int)$_POST['boy_id'];
 
+        // Ensure columns exist (first-time run before SQL patch)
+        try { $db->exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_boy_id INT DEFAULT NULL"); } catch(Exception $e) {}
+        try { $db->exec("ALTER TABLE orders ADD COLUMN IF NOT EXISTS delivery_assigned_at TIMESTAMP NULL DEFAULT NULL"); } catch(Exception $e) {}
+
         if ($boyId === 0) {
             $db->prepare("UPDATE orders SET delivery_boy_id=NULL, delivery_assigned_at=NULL WHERE id=?")->execute([$id]);
             echo json_encode(['ok' => true, 'msg' => 'Unassigned']);
@@ -203,7 +207,11 @@ if (isset($_GET['refresh_table'])) {
         'cod'     => "WHERE payment_method = 'cod'",
         default   => ""
     };
-    $orders = $db->query("SELECT o.*, COALESCE(db.name,'') as delivery_boy_name FROM orders o LEFT JOIN delivery_boys db ON db.id = o.delivery_boy_id {$whereClause} ORDER BY o.created_at DESC LIMIT 200")->fetchAll();
+    try {
+        $orders = $db->query("SELECT o.*, COALESCE(db.name,'') as delivery_boy_name FROM orders o LEFT JOIN delivery_boys db ON db.id = o.delivery_boy_id {$whereClause} ORDER BY o.created_at DESC LIMIT 200")->fetchAll();
+    } catch(Exception $e) {
+        $orders = $db->query("SELECT *, '' as delivery_boy_name FROM orders {$whereClause} ORDER BY created_at DESC LIMIT 200")->fetchAll();
+    }
     // Return full page so JS can extract tbody
     // (falls through to normal render below)
 }
@@ -223,7 +231,12 @@ $whereClause = match($filter) {
     'cod'     => "WHERE payment_method = 'cod'",
     default   => ""
 };
-$orders = $db->query("SELECT o.*, COALESCE(db.name,'') as delivery_boy_name FROM orders o LEFT JOIN delivery_boys db ON db.id = o.delivery_boy_id {$whereClause} ORDER BY o.created_at DESC LIMIT 200")->fetchAll();
+try {
+    $orders = $db->query("SELECT o.*, COALESCE(db.name,'') as delivery_boy_name FROM orders o LEFT JOIN delivery_boys db ON db.id = o.delivery_boy_id {$whereClause} ORDER BY o.created_at DESC LIMIT 200")->fetchAll();
+} catch(Exception $e) {
+    $orders = $db->query("SELECT *, '' as delivery_boy_name FROM orders {$whereClause} ORDER BY created_at DESC LIMIT 200")->fetchAll();
+    $deliveryBoys = []; // table missing — hide the column
+}
 
 // Stats
 $todayOrders  = $db->query("SELECT COUNT(*) FROM orders WHERE DATE(created_at)=CURDATE()")->fetchColumn();
